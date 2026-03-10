@@ -2,6 +2,17 @@
 
 All notable changes to BørneRutiner will be documented in this file.
 
+## [1.2.0] - 2026-03-11
+
+### Changed
+- **Data now syncs across all devices** — storage moved from browser localStorage to Home Assistant's built-in server-side storage (`frontend/set_user_data`)
+- Changes on phone now instantly appear on desktop, tablet, etc.
+- Existing localStorage data is automatically migrated on first load
+
+### Added
+- Loading state shown while data is fetched from HA
+- Fallback to localStorage if HA storage is unavailable
+
 ## [1.1.0] - 2026-03-11
 
 ### Changed

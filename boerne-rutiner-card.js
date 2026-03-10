@@ -7,7 +7,7 @@
  */
 
 const STORAGE_KEY = "boerne-rutiner";
-const VERSION = "1.0.0";
+const VERSION = "1.2.0";
 
 /* ───────── Default data ───────── */
 function defaultData() {
@@ -64,26 +64,38 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/* ───────── Storage ───────── */
-function loadData() {
+/* ───────── Storage (synced via HA) ───────── */
+function ensureStructure(d) {
+  const def = defaultData();
+  if (!d.routines) d.routines = def.routines;
+  if (!d.children || d.children.length === 0) d.children = def.children;
+  if (!d.completions) d.completions = {};
+  if (!d.pin) d.pin = "1234";
+  return d;
+}
+
+async function loadDataHA(hass) {
+  try {
+    const result = await hass.callWS({ type: "frontend/get_user_data", key: STORAGE_KEY });
+    if (result && result.value) {
+      return ensureStructure(result.value);
+    }
+  } catch (e) {
+    console.warn("BørneRutiner: HA storage load failed, trying localStorage.", e);
+  }
+  // Fallback: migrate from localStorage if available
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const d = JSON.parse(raw);
-      // Ensure structure
-      if (!d.routines) d.routines = defaultData().routines;
-      if (!d.children || d.children.length === 0) d.children = defaultData().children;
-      if (!d.completions) d.completions = {};
-      if (!d.pin) d.pin = "1234";
+      const d = ensureStructure(JSON.parse(raw));
+      console.info("BørneRutiner: migrated data from localStorage to HA.");
       return d;
     }
-  } catch (e) {
-    console.warn("BørneRutiner: failed to load data, resetting.", e);
-  }
+  } catch (e) { /* ignore */ }
   return defaultData();
 }
 
-function saveData(data) {
+function saveDataHA(hass, data) {
   // Prune completions older than 7 days
   const keys = Object.keys(data.completions || {});
   const cutoff = new Date();
@@ -91,7 +103,14 @@ function saveData(data) {
   keys.forEach((k) => {
     if (new Date(k) < cutoff) delete data.completions[k];
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (hass) {
+    hass.callWS({ type: "frontend/set_user_data", key: STORAGE_KEY, value: data }).catch((e) => {
+      console.warn("BørneRutiner: HA storage save failed, using localStorage fallback.", e);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    });
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
 }
 
 /* ───────── Confetti mini-module ───────── */
@@ -153,7 +172,8 @@ class BoerneRutinerCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._data = loadData();
+    this._data = defaultData();
+    this._dataLoaded = false;
     this._selectedChild = 0;
     this._activeRoutine = "morning";
     this._adminMode = false;
@@ -165,13 +185,31 @@ class BoerneRutinerCard extends HTMLElement {
   /* ── Lovelace interface ── */
   setConfig(config) {
     this._config = config;
-    // If first load and config has overrides, merge them
-    if (config.pin) this._data.pin = config.pin;
-    this._render();
+    if (this._dataLoaded) {
+      this._render();
+    }
   }
 
   set hass(hass) {
+    const hadHass = !!this._hass;
     this._hass = hass;
+    if (!hadHass && hass && !this._dataLoaded) {
+      this._loadFromHA();
+    }
+  }
+
+  async _loadFromHA() {
+    this._data = await loadDataHA(this._hass);
+    if (this._config?.pin && !this._data._pinOverridden) {
+      this._data.pin = this._config.pin;
+      this._data._pinOverridden = true;
+    }
+    this._dataLoaded = true;
+    this._render();
+  }
+
+  _save() {
+    saveDataHA(this._hass, this._data);
   }
 
   getCardSize() {
@@ -195,7 +233,7 @@ class BoerneRutinerCard extends HTMLElement {
   _toggleTask(childId, routineKey, taskId) {
     const comp = this._getCompletions(childId, routineKey);
     comp[taskId] = !comp[taskId];
-    saveData(this._data);
+    this._save();
 
     // Check if all tasks in routine are done
     const tasks = this._data.routines[routineKey].tasks;
@@ -225,7 +263,7 @@ class BoerneRutinerCard extends HTMLElement {
 
   _addTask(routineKey, name, icon) {
     this._data.routines[routineKey].tasks.push({ id: _uid(), name, icon: icon || "✅" });
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
@@ -233,7 +271,7 @@ class BoerneRutinerCard extends HTMLElement {
     this._data.routines[routineKey].tasks = this._data.routines[routineKey].tasks.filter(
       (t) => t.id !== taskId
     );
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
@@ -243,13 +281,13 @@ class BoerneRutinerCard extends HTMLElement {
       t.name = name;
       t.icon = icon;
     }
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
   _addChild(name, avatar) {
     this._data.children.push({ id: _uid(), name, avatar: avatar || "👦" });
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
@@ -257,7 +295,7 @@ class BoerneRutinerCard extends HTMLElement {
     this._data.children = this._data.children.filter((c) => c.id !== childId);
     if (this._selectedChild >= this._data.children.length)
       this._selectedChild = Math.max(0, this._data.children.length - 1);
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
@@ -267,19 +305,31 @@ class BoerneRutinerCard extends HTMLElement {
       c.name = name;
       c.avatar = avatar;
     }
-    saveData(this._data);
+    this._save();
     this._render();
   }
 
   _changePin(newPin) {
     this._data.pin = newPin;
-    saveData(this._data);
+    this._save();
   }
 
   /* ═══════════════════════════════════
      RENDER
      ═══════════════════════════════════ */
   _render() {
+    if (!this._dataLoaded) {
+      this.shadowRoot.innerHTML = `
+        <style>${this._styles()}</style>
+        <ha-card>
+          <div class="card-container">
+            <div class="loading">Loading routines…</div>
+          </div>
+        </ha-card>
+      `;
+      return;
+    }
+
     const child =
       this._data.children.length > 0 ? this._data.children[this._selectedChild] : null;
 
@@ -968,12 +1018,17 @@ class BoerneRutinerCard extends HTMLElement {
         flex: 1;
       }
 
-      /* ── Empty ── */
-      .empty {
+      /* ── Empty / Loading ── */
+      .empty, .loading {
         text-align: center;
         padding: 32px 16px;
         color: var(--text-secondary);
         font-size: 14px;
+      }
+      .loading {
+        font-size: 16px;
+        padding: 48px 16px;
+        opacity: 0.6;
       }
 
       /* ═══════ Admin ═══════ */
