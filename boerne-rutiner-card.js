@@ -691,8 +691,8 @@ class BoerneRutinerCard extends HTMLElement {
             const name = nameEl?.value?.trim();
             const icon = iconEl?.value?.trim() || "✅";
             if (!name) break;
-            this._updateTask(rk, taskId, name, icon);
             this._editingTask = null;
+            this._updateTask(rk, taskId, name, icon);
             break;
           }
 
@@ -738,8 +738,8 @@ class BoerneRutinerCard extends HTMLElement {
             const name = nameEl?.value?.trim();
             const avatar = avatarEl?.value?.trim() || "👦";
             if (!name) break;
-            this._updateChild(childId, name, avatar);
             this._editingChild = null;
+            this._updateChild(childId, name, avatar);
             break;
           }
 
