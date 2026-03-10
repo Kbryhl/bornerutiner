@@ -1,5 +1,6 @@
 {
   "name": "BørneRutiner - Kids Routine Tracker",
   "render_readme": true,
-  "filename": "dist/boerne-rutiner-card.js"
+  "content_in_root": false,
+  "filename": "boerne-rutiner-card.js"
 }
