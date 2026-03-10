@@ -463,11 +463,21 @@ class BoerneRutinerCard extends HTMLElement {
   _renderAdminTaskList(routineKey) {
     const routine = this._data.routines[routineKey];
     if (!routine) return "";
+    const isEditing = (id) => this._editingTask && this._editingTask.id === id;
     return `
       <div class="admin-task-list">
         ${routine.tasks
           .map(
-            (t) => `
+            (t) => isEditing(t.id) ? `
+          <div class="admin-task-item editing">
+            <input type="text" class="form-input inline-icon-input" id="edit-task-icon-${t.id}"
+                   value="${this._editingTask.icon}" maxlength="4">
+            <input type="text" class="form-input inline-name-input" id="edit-task-name-${t.id}"
+                   value="${this._editingTask.name}">
+            <button class="small-btn add-btn" data-action="save-task"
+                    data-routine="${routineKey}" data-task="${t.id}">💾</button>
+            <button class="small-btn" data-action="cancel-edit-task">✕</button>
+          </div>` : `
           <div class="admin-task-item">
             <span class="admin-task-icon">${t.icon}</span>
             <span class="admin-task-name">${t.name}</span>
@@ -480,26 +490,31 @@ class BoerneRutinerCard extends HTMLElement {
           )
           .join("")}
         <div class="add-form" id="add-task-form">
-          <input type="text" class="form-input" id="new-task-icon" placeholder="Icon (emoji)" maxlength="4"
-                 value="${this._editingTask ? this._editingTask.icon : ""}"
+          <input type="text" class="form-input" id="new-task-icon" placeholder="Icon" maxlength="4"
                  style="width:60px;text-align:center;">
-          <input type="text" class="form-input" id="new-task-name" placeholder="Task name"
-                 value="${this._editingTask ? this._editingTask.name : ""}">
-          <button class="small-btn add-btn" data-action="save-task" data-routine="${routineKey}">
-            ${this._editingTask ? "💾" : "➕"}
-          </button>
-          ${this._editingTask ? `<button class="small-btn" data-action="cancel-edit-task">✕</button>` : ""}
+          <input type="text" class="form-input" id="new-task-name" placeholder="Add new task...">
+          <button class="small-btn add-btn" data-action="add-task" data-routine="${routineKey}">➕</button>
         </div>
       </div>
     `;
   }
 
   _renderAdminChildren() {
+    const isEditing = (id) => this._editingChild && this._editingChild.id === id;
     return `
       <div class="admin-children">
         ${this._data.children
           .map(
-            (c) => `
+            (c) => isEditing(c.id) ? `
+          <div class="admin-child-item editing">
+            <input type="text" class="form-input inline-icon-input" id="edit-child-avatar-${c.id}"
+                   value="${this._editingChild.avatar}" maxlength="4">
+            <input type="text" class="form-input inline-name-input" id="edit-child-name-${c.id}"
+                   value="${this._editingChild.name}">
+            <button class="small-btn add-btn" data-action="save-child"
+                    data-child="${c.id}">💾</button>
+            <button class="small-btn" data-action="cancel-edit-child">✕</button>
+          </div>` : `
           <div class="admin-child-item">
             <span class="admin-child-avatar">${c.avatar}</span>
             <span class="admin-child-name">${c.name}</span>
@@ -512,14 +527,9 @@ class BoerneRutinerCard extends HTMLElement {
           .join("")}
         <div class="add-form" id="add-child-form">
           <input type="text" class="form-input" id="new-child-avatar" placeholder="Avatar" maxlength="4"
-                 value="${this._editingChild ? this._editingChild.avatar : ""}"
                  style="width:60px;text-align:center;">
-          <input type="text" class="form-input" id="new-child-name" placeholder="Child name"
-                 value="${this._editingChild ? this._editingChild.name : ""}">
-          <button class="small-btn add-btn" data-action="save-child">
-            ${this._editingChild ? "💾" : "➕"}
-          </button>
-          ${this._editingChild ? `<button class="small-btn" data-action="cancel-edit-child">✕</button>` : ""}
+          <input type="text" class="form-input" id="new-child-name" placeholder="Add new child...">
+          <button class="small-btn add-btn" data-action="add-child">➕</button>
         </div>
       </div>
     `;
@@ -625,17 +635,25 @@ class BoerneRutinerCard extends HTMLElement {
           /* -- Task CRUD -- */
           case "save-task": {
             const rk = btn.dataset.routine;
+            const taskId = btn.dataset.task;
+            const nameEl = this.shadowRoot.getElementById(`edit-task-name-${taskId}`);
+            const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${taskId}`);
+            const name = nameEl?.value?.trim();
+            const icon = iconEl?.value?.trim() || "✅";
+            if (!name) break;
+            this._updateTask(rk, taskId, name, icon);
+            this._editingTask = null;
+            break;
+          }
+
+          case "add-task": {
+            const rk = btn.dataset.routine;
             const nameEl = this.shadowRoot.getElementById("new-task-name");
             const iconEl = this.shadowRoot.getElementById("new-task-icon");
             const name = nameEl?.value?.trim();
             const icon = iconEl?.value?.trim() || "✅";
             if (!name) break;
-            if (this._editingTask) {
-              this._updateTask(rk, this._editingTask.id, name, icon);
-              this._editingTask = null;
-            } else {
-              this._addTask(rk, name, icon);
-            }
+            this._addTask(rk, name, icon);
             break;
           }
 
@@ -647,9 +665,8 @@ class BoerneRutinerCard extends HTMLElement {
               routine: btn.dataset.routine,
             };
             this._render();
-            // Focus name field
             setTimeout(() => {
-              const el = this.shadowRoot.getElementById("new-task-name");
+              const el = this.shadowRoot.getElementById(`edit-task-name-${btn.dataset.task}`);
               if (el) el.focus();
             }, 50);
             break;
@@ -665,17 +682,24 @@ class BoerneRutinerCard extends HTMLElement {
 
           /* -- Child CRUD -- */
           case "save-child": {
+            const childId = btn.dataset.child;
+            const nameEl = this.shadowRoot.getElementById(`edit-child-name-${childId}`);
+            const avatarEl = this.shadowRoot.getElementById(`edit-child-avatar-${childId}`);
+            const name = nameEl?.value?.trim();
+            const avatar = avatarEl?.value?.trim() || "👦";
+            if (!name) break;
+            this._updateChild(childId, name, avatar);
+            this._editingChild = null;
+            break;
+          }
+
+          case "add-child": {
             const nameEl = this.shadowRoot.getElementById("new-child-name");
             const avatarEl = this.shadowRoot.getElementById("new-child-avatar");
             const name = nameEl?.value?.trim();
             const avatar = avatarEl?.value?.trim() || "👦";
             if (!name) break;
-            if (this._editingChild) {
-              this._updateChild(this._editingChild.id, name, avatar);
-              this._editingChild = null;
-            } else {
-              this._addChild(name, avatar);
-            }
+            this._addChild(name, avatar);
             break;
           }
 
@@ -687,7 +711,7 @@ class BoerneRutinerCard extends HTMLElement {
             };
             this._render();
             setTimeout(() => {
-              const el = this.shadowRoot.getElementById("new-child-name");
+              const el = this.shadowRoot.getElementById(`edit-child-name-${btn.dataset.child}`);
               if (el) el.focus();
             }, 50);
             break;
@@ -1126,6 +1150,22 @@ class BoerneRutinerCard extends HTMLElement {
       }
       .add-btn:hover {
         background: rgba(76, 175, 80, 0.25);
+      }
+
+      /* ── Inline editing ── */
+      .admin-task-item.editing,
+      .admin-child-item.editing {
+        background: rgba(92, 107, 192, 0.08);
+        border: 2px solid var(--primary);
+        padding: 8px 10px;
+      }
+      .inline-icon-input {
+        width: 50px !important;
+        text-align: center;
+        flex: 0 0 50px;
+      }
+      .inline-name-input {
+        flex: 1;
       }
 
       .add-form {
