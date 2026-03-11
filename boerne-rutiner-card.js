@@ -7,8 +7,8 @@
  */
 
 const STORAGE_KEY = "boerne-rutiner";
-const VERSION = "1.3.0";
-const SYNC_INTERVAL_MS = 30000; // Re‑fetch data from HA every 30 s
+const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
+const VERSION = "1.4.0";
 
 /* ───────── Default data ───────── */
 function defaultData() {
@@ -65,7 +65,7 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/* ───────── Storage (synced via HA) ───────── */
+/* ───────── Storage (server‑level shared entity) ───────── */
 function ensureStructure(d) {
   const def = defaultData();
   if (!d.routines) d.routines = def.routines;
@@ -75,43 +75,75 @@ function ensureStructure(d) {
   return d;
 }
 
-async function loadDataHA(hass) {
-  try {
-    const result = await hass.callWS({ type: "frontend/get_user_data", key: STORAGE_KEY });
-    if (result && result.value) {
-      return ensureStructure(result.value);
-    }
-  } catch (e) {
-    console.warn("BørneRutiner: HA storage load failed, trying localStorage.", e);
-  }
-  // Fallback: migrate from localStorage if available
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const d = ensureStructure(JSON.parse(raw));
-      console.info("BørneRutiner: migrated data from localStorage to HA.");
-      return d;
-    }
-  } catch (e) { /* ignore */ }
-  return defaultData();
-}
-
-function saveDataHA(hass, data) {
-  // Prune completions older than 7 days
+function _pruneCompletions(data) {
   const keys = Object.keys(data.completions || {});
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 7);
-  keys.forEach((k) => {
-    if (new Date(k) < cutoff) delete data.completions[k];
-  });
-  if (hass) {
-    hass.callWS({ type: "frontend/set_user_data", key: STORAGE_KEY, value: data }).catch((e) => {
-      console.warn("BørneRutiner: HA storage save failed, using localStorage fallback.", e);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    });
-  } else {
+  keys.forEach((k) => { if (new Date(k) < cutoff) delete data.completions[k]; });
+}
+
+/** Parse the store attribute from the shared entity. */
+function _parseStore(entity) {
+  if (!entity?.attributes?.store) return null;
+  try {
+    const raw = entity.attributes.store;
+    return ensureStructure(typeof raw === "string" ? JSON.parse(raw) : raw);
+  } catch (_) { return null; }
+}
+
+/**
+ * Load data – priority:
+ *  1. Shared entity (server‑level, visible to all HA users)
+ *  2. Per‑user frontend storage (survives restarts)
+ *  3. localStorage legacy fallback
+ *  4. Defaults
+ */
+async function loadDataShared(hass) {
+  // 1. Shared entity
+  const fromEntity = _parseStore(hass.states?.[STORAGE_ENTITY]);
+  if (fromEntity) return fromEntity;
+
+  // 2. Per‑user storage (migration / restart recovery)
+  try {
+    const result = await hass.callWS({ type: "frontend/get_user_data", key: STORAGE_KEY });
+    if (result?.value) {
+      console.info("BørneRutiner: restoring data from per‑user storage to shared entity.");
+      return ensureStructure(result.value);
+    }
+  } catch (_) { /* ignore */ }
+
+  // 3. localStorage legacy
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return ensureStructure(JSON.parse(raw));
+  } catch (_) { /* ignore */ }
+
+  return defaultData();
+}
+
+/** Save to shared entity (all users) + per‑user backup (restart‑safe). */
+function saveDataShared(hass, data) {
+  _pruneCompletions(data);
+
+  if (!hass) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return;
   }
+
+  // Primary: shared entity via REST API
+  hass.callApi("POST", `states/${STORAGE_ENTITY}`, {
+    state: todayKey(),
+    attributes: {
+      friendly_name: "B\u00f8rneRutiner Data",
+      icon: "mdi:clipboard-check-outline",
+      store: data,
+    },
+  }).catch((e) => {
+    console.warn("B\u00f8rneRutiner: shared entity save failed.", e);
+  });
+
+  // Backup: per‑user storage (survives HA restarts)
+  hass.callWS({ type: "frontend/set_user_data", key: STORAGE_KEY, value: data }).catch(() => {});
 }
 
 /* ───────── Confetti mini-module ───────── */
@@ -181,7 +213,8 @@ class BoerneRutinerCard extends HTMLElement {
     this._adminView = "tasks"; // tasks | children | pin
     this._editingTask = null;
     this._editingChild = null;
-    this._lastSync = 0;
+    this._lastEntityUpdate = null;
+    this._lastSaveTime = 0;
   }
 
   /* ── Lifecycle (visibility‑based refresh) ── */
@@ -213,49 +246,61 @@ class BoerneRutinerCard extends HTMLElement {
     this._hass = hass;
     if (!hadHass && hass && !this._dataLoaded) {
       this._loadFromHA();
-    } else if (this._dataLoaded && hass) {
-      // Periodic background sync so other devices' changes appear
-      const now = Date.now();
-      if (now - this._lastSync > SYNC_INTERVAL_MS) {
-        this._resync();
+      return;
+    }
+    if (this._dataLoaded && hass) {
+      // Real‑time sync: HA pushes entity state changes to all clients
+      const entity = hass.states?.[STORAGE_ENTITY];
+      if (entity) {
+        const lu = entity.last_updated;
+        if (lu !== this._lastEntityUpdate) {
+          this._lastEntityUpdate = lu;
+          // Skip echo from our own save
+          if (Date.now() - this._lastSaveTime > 2000) {
+            this._syncFromEntity(entity);
+          }
+        }
       }
     }
   }
 
   async _loadFromHA() {
-    this._data = await loadDataHA(this._hass);
+    this._data = await loadDataShared(this._hass);
     if (this._config?.pin && !this._data._pinOverridden) {
       this._data.pin = this._config.pin;
       this._data._pinOverridden = true;
     }
     this._dataLoaded = true;
-    this._lastSync = Date.now();
+    this._lastSaveTime = Date.now();
+    // Persist to shared entity so all devices see the data
+    saveDataShared(this._hass, this._data);
+    const entity = this._hass.states?.[STORAGE_ENTITY];
+    if (entity) this._lastEntityUpdate = entity.last_updated;
     this._render();
   }
 
-  /** Re‑fetch data from HA; only re‑render when something actually changed. */
-  async _resync() {
-    this._lastSync = Date.now();
-    try {
-      const result = await this._hass.callWS({
-        type: "frontend/get_user_data",
-        key: STORAGE_KEY,
-      });
-      if (result && result.value) {
-        const fresh = ensureStructure(result.value);
-        if (JSON.stringify(fresh) !== JSON.stringify(this._data)) {
-          this._data = fresh;
-          this._render();
-        }
-      }
-    } catch (_) {
-      /* silent – will retry on next interval */
+  /** Apply data from the shared entity if it differs from local state. */
+  _syncFromEntity(entity) {
+    const fresh = _parseStore(entity);
+    if (fresh && JSON.stringify(fresh) !== JSON.stringify(this._data)) {
+      this._data = fresh;
+      this._render();
+    }
+  }
+
+  /** Re‑sync on visibility change (tab/app foregrounded). */
+  _resync() {
+    if (!this._hass) return;
+    const entity = this._hass.states?.[STORAGE_ENTITY];
+    if (entity) {
+      this._lastEntityUpdate = entity.last_updated;
+      this._syncFromEntity(entity);
     }
   }
 
   _save() {
-    this._lastSync = Date.now(); // avoid re‑fetching what we just wrote
-    saveDataHA(this._hass, this._data);
+    this._lastSaveTime = Date.now();
+    saveDataShared(this._hass, this._data);
   }
 
   getCardSize() {
