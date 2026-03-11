@@ -621,8 +621,11 @@ class BoerneRutinerCard extends HTMLElement {
             </button>`
             )
             .join("")}
-          <button class="admin-routine-tab add-routine-tab" data-action="add-routine">➕</button>
+          <button class="admin-routine-tab add-routine-tab" data-action="add-routine" title="Add routine to this child">➕</button>
         </div>
+
+        ${this._data.children.length > 1 ? `
+        <button class="add-all-btn" data-action="add-routine-all">👨‍👩‍👧‍👦 Tilføj rutine til alle børn</button>` : ""}
 
         ${routine ? this._renderAdminRoutineDetail(child, routine) : `<div class="empty">No routines. Click ➕ to add one.</div>`}
       </div>
@@ -977,6 +980,29 @@ class BoerneRutinerCard extends HTMLElement {
                 if (el) { el.focus(); el.select(); }
               }, 50);
             }
+            break;
+          }
+
+          case "add-routine-all": {
+            const colorIdx = Math.max(...this._data.children.map(c => c.routines?.length || 0)) % ROUTINE_COLORS.length;
+            const templateRoutine = {
+              name: "New Routine",
+              icon: "📋",
+              color: ROUTINE_COLORS[colorIdx],
+              tasks: [],
+            };
+            this._data.children.forEach((c) => {
+              c.routines.push({ ...templateRoutine, id: _uid(), tasks: [] });
+            });
+            const adminChild = this._adminCurrentChild();
+            if (adminChild) this._adminRoutine = adminChild.routines.length - 1;
+            this._editingRoutine = { ...this._adminCurrentRoutine() };
+            this._save();
+            this._render();
+            setTimeout(() => {
+              const el = this.shadowRoot.getElementById("edit-routine-name");
+              if (el) { el.focus(); el.select(); }
+            }, 50);
             break;
           }
 
@@ -1462,6 +1488,27 @@ class BoerneRutinerCard extends HTMLElement {
       .add-routine-tab:hover {
         border-color: #4CAF50;
         background: rgba(76, 175, 80, 0.08);
+      }
+
+      .add-all-btn {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 12px;
+        border: 2px dashed var(--divider);
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+        font-family: inherit;
+      }
+      .add-all-btn:hover {
+        border-color: var(--primary);
+        background: rgba(92, 107, 192, 0.08);
+        color: var(--primary);
       }
 
       /* ── Routine settings row ── */
