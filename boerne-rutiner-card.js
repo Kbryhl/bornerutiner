@@ -624,8 +624,8 @@ class BoerneRutinerCard extends HTMLElement {
           <button class="admin-routine-tab add-routine-tab" data-action="add-routine" title="Add routine to this child">➕</button>
         </div>
 
-        ${this._data.children.length > 1 ? `
-        <button class="add-all-btn" data-action="add-routine-all">👨‍👩‍👧‍👦 Tilføj rutine til alle børn</button>` : ""}
+        ${routine && this._data.children.length > 1 ? `
+        <button class="add-all-btn" data-action="copy-routine-all">👨‍👩‍👧‍👦 Kopiér denne rutine til alle børn</button>` : ""}
 
         ${routine ? this._renderAdminRoutineDetail(child, routine) : `<div class="empty">No routines. Click ➕ to add one.</div>`}
       </div>
@@ -983,26 +983,24 @@ class BoerneRutinerCard extends HTMLElement {
             break;
           }
 
-          case "add-routine-all": {
-            const colorIdx = Math.max(...this._data.children.map(c => c.routines?.length || 0)) % ROUTINE_COLORS.length;
-            const templateRoutine = {
-              name: "New Routine",
-              icon: "📋",
-              color: ROUTINE_COLORS[colorIdx],
-              tasks: [],
-            };
-            this._data.children.forEach((c) => {
-              c.routines.push({ ...templateRoutine, id: _uid(), tasks: [] });
-            });
-            const adminChild = this._adminCurrentChild();
-            if (adminChild) this._adminRoutine = adminChild.routines.length - 1;
-            this._editingRoutine = { ...this._adminCurrentRoutine() };
-            this._save();
-            this._render();
-            setTimeout(() => {
-              const el = this.shadowRoot.getElementById("edit-routine-name");
-              if (el) { el.focus(); el.select(); }
-            }, 50);
+          case "copy-routine-all": {
+            const srcRoutine = this._adminCurrentRoutine();
+            const srcChild = this._adminCurrentChild();
+            if (srcRoutine && srcChild) {
+              this._data.children.forEach((c) => {
+                if (c.id === srcChild.id) return; // skip source child
+                const copy = {
+                  id: _uid(),
+                  name: srcRoutine.name,
+                  icon: srcRoutine.icon,
+                  color: srcRoutine.color,
+                  tasks: srcRoutine.tasks.map((t) => ({ id: _uid(), name: t.name, icon: t.icon })),
+                };
+                c.routines.push(copy);
+              });
+              this._save();
+              this._render();
+            }
             break;
           }
 
