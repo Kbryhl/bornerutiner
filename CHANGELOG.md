@@ -1,73 +1,33 @@
 # Changelog
 
-All notable changes to BørneRutiner will be documented in this file.
+Alle ændringer i BørneRutiner dokumenteres her.
 
-## [1.5.0] - 2026-03-12
+## [1.0.0] - 2026-03-12
 
-### Changed
-- **Per-child routines** — each child now has their own independent set of routines. Morning routines for one child can have completely different tasks, names, icons, and colors than another child's.
-- New children are created with a copy of the default routines (Morning, After School, Evening) which can then be customised independently.
-- Routine tabs in the main view now reflect the selected child's routines.
+Første officielle release! Alt fra de tidlige udviklingsversioner er samlet her.
 
-### Added
-- **Add / remove routines** — parents can add unlimited routines per child, not just the original three. Each routine gets an auto-assigned color.
-- **Edit routine name, icon & color** — inline editing for routine properties with a color picker.
-- **Delete routines** — remove routines that are no longer needed.
-- Child selector inside the admin Routines tab to switch between children.
-- Automatic data migration from old global-routines format to new per-child format.
+### Funktioner
 
-## [1.4.0] - 2026-03-11
+- **Ubegrænsede rutiner per barn** — Morgen, Eftermiddag, Aften og hvad du ellers finder på. Tilføj, rediger navn/ikon/farve, og slet rutiner frit.
+- **Rutiner er uafhængige per barn** — Hvert barn har sine egne rutiner med egne opgaver, så morgenrutinen for ét barn kan se helt anderledes ud end for et andet.
+- **Kopiér rutine til alle børn** — Opret en rutine på ét barn og kopiér den til alle andre med ét tryk.
+- **Flere børn** med egne avatarer og navne.
+- **Interaktive tjeklister** — Børnene trykker på opgaverne for at markere dem.
+- **Fremskridtsbjælke** per rutine.
+- **Konfetti-fejring** 🎉 når en hel rutine er gennemført.
+- **PIN-beskyttet forældrepanel** til at styre opgaver, rutiner, børn og PIN-kode.
+- **Synkronisering på tværs af enheder** — Data gemmes i en delt HA-entitet (`sensor.boerne_rutiner_data`) med realtids-sync. Alle enheder og brugere ser det samme.
+- **Daglig auto-nulstilling** — Opgaver nulstilles automatisk hver ny dag. Historik gemmes i 7 dage.
+- **Inline redigering** — Opgaver og børn redigeres direkte i listen, ingen popups.
+- **Mørkt tema** — Følger dit Home Assistant-tema.
+- **HACS-kompatibel** — Nem installation via HACS.
 
-### Changed
-- **Server-level shared storage** — data is now stored in a shared HA entity (`sensor.boerne_rutiner_data`) instead of per-user storage, so ALL users see the same data regardless of which HA account they are logged in with
-- Real-time sync via HA's built-in entity state push — changes appear instantly on all devices without polling
-- Per-user storage kept as backup for HA restart recovery
+### Udviklingshistorik
 
-### Added
-- Automatic migration from per-user storage to shared entity on first load
-- Echo suppression to prevent re-rendering your own saves
-
-## [1.3.0] - 2026-03-11
-
-### Added
-- **Cross-device sync** — periodic background resync every 30 seconds
-- Visibility-change refresh: data reloads instantly when app/tab is foregrounded
-- Smart change detection: only re-renders when data actually changed
-
-## [1.2.0] - 2026-03-11
-
-### Changed
-- **Data now syncs across all devices** — storage moved from browser localStorage to Home Assistant's built-in server-side storage (`frontend/set_user_data`)
-- Changes on phone now instantly appear on desktop, tablet, etc.
-- Existing localStorage data is automatically migrated on first load
-
-### Added
-- Loading state shown while data is fetched from HA
-- Fallback to localStorage if HA storage is unavailable
-
-## [1.1.0] - 2026-03-11
-
-### Changed
-- Tasks and children now edit **inline** — clicking ✏️ turns the row into editable fields instead of using a separate form
-- Editing rows are visually highlighted with a border
-- "Add new" form is always visible at the bottom, separate from editing
-
-### Fixed
-- Focus now correctly targets the inline input when editing
-
-## [1.0.0] - 2026-03-10
-
-### Added
-- Initial release
-- Three routine sections: Morning ☀️, After School 📚, Evening 🌙
-- Multi-child support with custom avatars
-- Interactive task checkboxes with progress bars
-- Confetti celebration when a routine is fully completed
-- PIN-protected parent admin panel
-- Add, edit, and remove tasks per routine
-- Add, edit, and remove children
-- Changeable parent PIN
-- Daily auto-reset of completions
-- 7-day completion history pruning
-- Dark mode support via HA theme variables
-- HACS-compatible repository structure
+| Version | Milepæl |
+|---------|---------|
+| 0.1 | Første udgave med tre faste rutiner, localStorage og basis-admin |
+| 0.2 | Inline redigering af opgaver og børn |
+| 0.3 | Data flyttet til HA server-storage, synkronisering på tværs af enheder |
+| 0.4 | Realtids-sync via delt HA-entitet, echo-undertrykkelse |
+| 0.5 | Per-barn rutiner, tilføj/slet/rediger rutiner, kopiér til alle børn |

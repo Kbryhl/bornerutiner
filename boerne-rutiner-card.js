@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.5.0
+ * Version: 1.0.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.5.0";
+const VERSION = "1.0.0";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
