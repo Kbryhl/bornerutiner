@@ -602,7 +602,109 @@ class BoerneRutinerCard extends HTMLElement {
   /* ═══════════════════
      EVENT HANDLING
      ═══════════════════ */
+
+  _doSaveTask(routineKey, taskId) {
+    const nameEl = this.shadowRoot.getElementById(`edit-task-name-${taskId}`);
+    const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${taskId}`);
+    const name = nameEl?.value?.trim();
+    const icon = iconEl?.value?.trim() || "✅";
+    if (!name) return;
+    this._editingTask = null;
+    const t = this._data.routines[routineKey]?.tasks.find((t) => t.id === taskId);
+    if (t) {
+      t.name = name;
+      t.icon = icon;
+    }
+    this._save();
+    this._render();
+  }
+
+  _doAddTask(routineKey) {
+    const nameEl = this.shadowRoot.getElementById("new-task-name");
+    const iconEl = this.shadowRoot.getElementById("new-task-icon");
+    const name = nameEl?.value?.trim();
+    const icon = iconEl?.value?.trim() || "✅";
+    if (!name) return;
+    this._data.routines[routineKey].tasks.push({ id: _uid(), name, icon });
+    this._save();
+    this._render();
+  }
+
+  _doSaveChild(childId) {
+    const nameEl = this.shadowRoot.getElementById(`edit-child-name-${childId}`);
+    const avatarEl = this.shadowRoot.getElementById(`edit-child-avatar-${childId}`);
+    const name = nameEl?.value?.trim();
+    const avatar = avatarEl?.value?.trim() || "👦";
+    if (!name) return;
+    this._editingChild = null;
+    const c = this._data.children.find((c) => c.id === childId);
+    if (c) {
+      c.name = name;
+      c.avatar = avatar;
+    }
+    this._save();
+    this._render();
+  }
+
+  _doAddChild() {
+    const nameEl = this.shadowRoot.getElementById("new-child-name");
+    const avatarEl = this.shadowRoot.getElementById("new-child-avatar");
+    const name = nameEl?.value?.trim();
+    const avatar = avatarEl?.value?.trim() || "👦";
+    if (!name) return;
+    this._data.children.push({ id: _uid(), name, avatar });
+    this._save();
+    this._render();
+  }
+
   _attachEvents() {
+    // ── Enter key support on all inputs ──
+    this.shadowRoot.querySelectorAll("input.form-input").forEach((input) => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+
+        // Determine which save action to trigger
+        const parent = input.closest(".admin-task-item");
+        if (parent?.classList.contains("editing")) {
+          const saveBtn = parent.querySelector("[data-action='save-task']");
+          if (saveBtn) {
+            this._doSaveTask(saveBtn.dataset.routine, saveBtn.dataset.task);
+            return;
+          }
+        }
+
+        const childParent = input.closest(".admin-child-item");
+        if (childParent?.classList.contains("editing")) {
+          const saveBtn = childParent.querySelector("[data-action='save-child']");
+          if (saveBtn) {
+            this._doSaveChild(saveBtn.dataset.child);
+            return;
+          }
+        }
+
+        const addForm = input.closest(".add-form");
+        if (addForm) {
+          const addTaskBtn = addForm.querySelector("[data-action='add-task']");
+          if (addTaskBtn) {
+            this._doAddTask(addTaskBtn.dataset.routine);
+            return;
+          }
+          const addChildBtn = addForm.querySelector("[data-action='add-child']");
+          if (addChildBtn) {
+            this._doAddChild();
+            return;
+          }
+          const savePinBtn = addForm.querySelector("[data-action='save-pin']");
+          if (savePinBtn) {
+            savePinBtn.click();
+            return;
+          }
+        }
+      });
+    });
+
+    // ── Click handlers ──
     this.shadowRoot.querySelectorAll("[data-action]").forEach((el) => {
       el.addEventListener("click", (e) => {
         const btn = e.currentTarget;
@@ -683,29 +785,13 @@ class BoerneRutinerCard extends HTMLElement {
             break;
 
           /* -- Task CRUD -- */
-          case "save-task": {
-            const rk = btn.dataset.routine;
-            const taskId = btn.dataset.task;
-            const nameEl = this.shadowRoot.getElementById(`edit-task-name-${taskId}`);
-            const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${taskId}`);
-            const name = nameEl?.value?.trim();
-            const icon = iconEl?.value?.trim() || "✅";
-            if (!name) break;
-            this._editingTask = null;
-            this._updateTask(rk, taskId, name, icon);
+          case "save-task":
+            this._doSaveTask(btn.dataset.routine, btn.dataset.task);
             break;
-          }
 
-          case "add-task": {
-            const rk = btn.dataset.routine;
-            const nameEl = this.shadowRoot.getElementById("new-task-name");
-            const iconEl = this.shadowRoot.getElementById("new-task-icon");
-            const name = nameEl?.value?.trim();
-            const icon = iconEl?.value?.trim() || "✅";
-            if (!name) break;
-            this._addTask(rk, name, icon);
+          case "add-task":
+            this._doAddTask(btn.dataset.routine);
             break;
-          }
 
           case "edit-task":
             this._editingTask = {
@@ -731,27 +817,13 @@ class BoerneRutinerCard extends HTMLElement {
             break;
 
           /* -- Child CRUD -- */
-          case "save-child": {
-            const childId = btn.dataset.child;
-            const nameEl = this.shadowRoot.getElementById(`edit-child-name-${childId}`);
-            const avatarEl = this.shadowRoot.getElementById(`edit-child-avatar-${childId}`);
-            const name = nameEl?.value?.trim();
-            const avatar = avatarEl?.value?.trim() || "👦";
-            if (!name) break;
-            this._editingChild = null;
-            this._updateChild(childId, name, avatar);
+          case "save-child":
+            this._doSaveChild(btn.dataset.child);
             break;
-          }
 
-          case "add-child": {
-            const nameEl = this.shadowRoot.getElementById("new-child-name");
-            const avatarEl = this.shadowRoot.getElementById("new-child-avatar");
-            const name = nameEl?.value?.trim();
-            const avatar = avatarEl?.value?.trim() || "👦";
-            if (!name) break;
-            this._addChild(name, avatar);
+          case "add-child":
+            this._doAddChild();
             break;
-          }
 
           case "edit-child":
             this._editingChild = {
@@ -791,6 +863,13 @@ class BoerneRutinerCard extends HTMLElement {
             break;
           }
         }
+      });
+    });
+
+    // ── Prevent save buttons from stealing focus from inputs ──
+    this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child']").forEach((btn) => {
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
       });
     });
   }
