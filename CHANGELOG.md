@@ -2,6 +2,24 @@
 
 All notable changes to BørneRutiner will be documented in this file.
 
+## [1.4.0] - 2026-03-11
+
+### Changed
+- **Server-level shared storage** — data is now stored in a shared HA entity (`sensor.boerne_rutiner_data`) instead of per-user storage, so ALL users see the same data regardless of which HA account they are logged in with
+- Real-time sync via HA's built-in entity state push — changes appear instantly on all devices without polling
+- Per-user storage kept as backup for HA restart recovery
+
+### Added
+- Automatic migration from per-user storage to shared entity on first load
+- Echo suppression to prevent re-rendering your own saves
+
+## [1.3.0] - 2026-03-11
+
+### Added
+- **Cross-device sync** — periodic background resync every 30 seconds
+- Visibility-change refresh: data reloads instantly when app/tab is foregrounded
+- Smart change detection: only re-renders when data actually changed
+
 ## [1.2.0] - 2026-03-11
 
 ### Changed
