@@ -3,54 +3,60 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.4.0
+ * Version: 1.5.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 
-/* ───────── Default data ───────── */
+/* ───────── Default routines (template for new children) ───────── */
+function defaultRoutines() {
+  return [
+    {
+      id: _uid(),
+      name: "Morning Routine",
+      icon: "☀️",
+      color: "#FF9800",
+      tasks: [
+        { id: _uid(), name: "Brush teeth", icon: "🪥" },
+        { id: _uid(), name: "Get dressed", icon: "👕" },
+        { id: _uid(), name: "Eat breakfast", icon: "🥣" },
+        { id: _uid(), name: "Pack school bag", icon: "🎒" },
+      ],
+    },
+    {
+      id: _uid(),
+      name: "After School",
+      icon: "📚",
+      color: "#2196F3",
+      tasks: [
+        { id: _uid(), name: "Homework", icon: "📝" },
+        { id: _uid(), name: "Tidy room", icon: "🧹" },
+        { id: _uid(), name: "Set the table", icon: "🍽️" },
+      ],
+    },
+    {
+      id: _uid(),
+      name: "Evening Routine",
+      icon: "🌙",
+      color: "#7C4DFF",
+      tasks: [
+        { id: _uid(), name: "Shower / Bath", icon: "🚿" },
+        { id: _uid(), name: "Brush teeth", icon: "🪥" },
+        { id: _uid(), name: "Put on pajamas", icon: "👕" },
+        { id: _uid(), name: "Read a book", icon: "📖" },
+      ],
+    },
+  ];
+}
+
 function defaultData() {
   return {
     pin: "1234",
     children: [
-      { id: _uid(), name: "Child 1", avatar: "👦" },
+      { id: _uid(), name: "Child 1", avatar: "👦", routines: defaultRoutines() },
     ],
-    routines: {
-      morning: {
-        name: "Morning Routine",
-        icon: "☀️",
-        color: "#FF9800",
-        tasks: [
-          { id: _uid(), name: "Brush teeth", icon: "🪥" },
-          { id: _uid(), name: "Get dressed", icon: "👕" },
-          { id: _uid(), name: "Eat breakfast", icon: "🥣" },
-          { id: _uid(), name: "Pack school bag", icon: "🎒" },
-        ],
-      },
-      afterschool: {
-        name: "After School",
-        icon: "📚",
-        color: "#2196F3",
-        tasks: [
-          { id: _uid(), name: "Homework", icon: "📝" },
-          { id: _uid(), name: "Tidy room", icon: "🧹" },
-          { id: _uid(), name: "Set the table", icon: "🍽️" },
-        ],
-      },
-      evening: {
-        name: "Evening Routine",
-        icon: "🌙",
-        color: "#7C4DFF",
-        tasks: [
-          { id: _uid(), name: "Shower / Bath", icon: "🚿" },
-          { id: _uid(), name: "Brush teeth", icon: "🪥" },
-          { id: _uid(), name: "Put on pajamas", icon: "👕" },
-          { id: _uid(), name: "Read a book", icon: "📖" },
-        ],
-      },
-    },
     completions: {},
   };
 }
@@ -65,11 +71,52 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const ROUTINE_COLORS = [
+  "#FF9800", "#2196F3", "#7C4DFF", "#4CAF50", "#E91E63",
+  "#00BCD4", "#FF5722", "#9C27B0", "#009688", "#795548",
+];
+
 /* ───────── Storage (server‑level shared entity) ───────── */
+
+/**
+ * Migrate old format (global routines object) → new format (per‑child routines array).
+ */
+function _migrateData(d) {
+  if (!d.routines) return d; // already new format or default
+  // Old format: d.routines = { morning: {name,icon,color,tasks}, ... }
+  const globalRoutines = Object.values(d.routines).map((r) => ({
+    id: _uid(),
+    name: r.name,
+    icon: r.icon,
+    color: r.color,
+    tasks: (r.tasks || []).map((t) => ({ id: t.id, name: t.name, icon: t.icon })),
+  }));
+  (d.children || []).forEach((child) => {
+    if (!child.routines) {
+      // Deep clone so each child gets independent copy
+      child.routines = JSON.parse(JSON.stringify(globalRoutines));
+      // Give each child unique routine/task IDs
+      child.routines.forEach((r) => {
+        r.id = _uid();
+        r.tasks.forEach((t) => { t.id = _uid(); });
+      });
+    }
+  });
+  delete d.routines;
+  console.info("BørneRutiner: migrated from global routines to per‑child routines.");
+  return d;
+}
+
 function ensureStructure(d) {
-  const def = defaultData();
-  if (!d.routines) d.routines = def.routines;
-  if (!d.children || d.children.length === 0) d.children = def.children;
+  d = _migrateData(d);
+  if (!d.children || d.children.length === 0) {
+    d.children = defaultData().children;
+  }
+  d.children.forEach((child) => {
+    if (!child.routines || child.routines.length === 0) {
+      child.routines = defaultRoutines();
+    }
+  });
   if (!d.completions) d.completions = {};
   if (!d.pin) d.pin = "1234";
   return d;
@@ -91,13 +138,6 @@ function _parseStore(entity) {
   } catch (_) { return null; }
 }
 
-/**
- * Load data – priority:
- *  1. Shared entity (server‑level, visible to all HA users)
- *  2. Per‑user frontend storage (survives restarts)
- *  3. localStorage legacy fallback
- *  4. Defaults
- */
 async function loadDataShared(hass) {
   // 1. Shared entity
   const fromEntity = _parseStore(hass.states?.[STORAGE_ENTITY]);
@@ -121,7 +161,6 @@ async function loadDataShared(hass) {
   return defaultData();
 }
 
-/** Save to shared entity (all users) + per‑user backup (restart‑safe). */
 function saveDataShared(hass, data) {
   _pruneCompletions(data);
 
@@ -130,7 +169,6 @@ function saveDataShared(hass, data) {
     return;
   }
 
-  // Primary: shared entity via REST API
   hass.callApi("POST", `states/${STORAGE_ENTITY}`, {
     state: todayKey(),
     attributes: {
@@ -142,7 +180,6 @@ function saveDataShared(hass, data) {
     console.warn("B\u00f8rneRutiner: shared entity save failed.", e);
   });
 
-  // Backup: per‑user storage (survives HA restarts)
   hass.callWS({ type: "frontend/set_user_data", key: STORAGE_KEY, value: data }).catch(() => {});
 }
 
@@ -208,11 +245,14 @@ class BoerneRutinerCard extends HTMLElement {
     this._data = defaultData();
     this._dataLoaded = false;
     this._selectedChild = 0;
-    this._activeRoutine = "morning";
+    this._activeRoutine = 0; // index into child.routines[]
     this._adminMode = false;
     this._adminView = "tasks"; // tasks | children | pin
+    this._adminChild = 0;     // which child we're editing in admin
+    this._adminRoutine = 0;   // which routine index in admin
     this._editingTask = null;
     this._editingChild = null;
+    this._editingRoutine = null;
     this._lastEntityUpdate = null;
     this._lastSaveTime = 0;
   }
@@ -236,9 +276,7 @@ class BoerneRutinerCard extends HTMLElement {
   /* ── Lovelace interface ── */
   setConfig(config) {
     this._config = config;
-    if (this._dataLoaded) {
-      this._render();
-    }
+    if (this._dataLoaded) this._render();
   }
 
   set hass(hass) {
@@ -249,13 +287,11 @@ class BoerneRutinerCard extends HTMLElement {
       return;
     }
     if (this._dataLoaded && hass) {
-      // Real‑time sync: HA pushes entity state changes to all clients
       const entity = hass.states?.[STORAGE_ENTITY];
       if (entity) {
         const lu = entity.last_updated;
         if (lu !== this._lastEntityUpdate) {
           this._lastEntityUpdate = lu;
-          // Skip echo from our own save
           if (Date.now() - this._lastSaveTime > 2000) {
             this._syncFromEntity(entity);
           }
@@ -272,14 +308,12 @@ class BoerneRutinerCard extends HTMLElement {
     }
     this._dataLoaded = true;
     this._lastSaveTime = Date.now();
-    // Persist to shared entity so all devices see the data
     saveDataShared(this._hass, this._data);
     const entity = this._hass.states?.[STORAGE_ENTITY];
     if (entity) this._lastEntityUpdate = entity.last_updated;
     this._render();
   }
 
-  /** Apply data from the shared entity if it differs from local state. */
   _syncFromEntity(entity) {
     const fresh = _parseStore(entity);
     if (fresh && JSON.stringify(fresh) !== JSON.stringify(this._data)) {
@@ -288,7 +322,6 @@ class BoerneRutinerCard extends HTMLElement {
     }
   }
 
-  /** Re‑sync on visibility change (tab/app foregrounded). */
   _resync() {
     if (!this._hass) return;
     const entity = this._hass.states?.[STORAGE_ENTITY];
@@ -303,101 +336,69 @@ class BoerneRutinerCard extends HTMLElement {
     saveDataShared(this._hass, this._data);
   }
 
-  getCardSize() {
-    return 6;
+  getCardSize() { return 6; }
+  static getStubConfig() { return {}; }
+
+  /* ── Helpers to get child / routine safely ── */
+  _currentChild() {
+    const children = this._data.children;
+    if (!children.length) return null;
+    if (this._selectedChild >= children.length) this._selectedChild = 0;
+    return children[this._selectedChild];
   }
 
-  static getStubConfig() {
-    return {};
+  _childRoutines(child) {
+    return child?.routines || [];
+  }
+
+  _currentRoutine(child) {
+    const routines = this._childRoutines(child);
+    if (!routines.length) return null;
+    if (this._activeRoutine >= routines.length) this._activeRoutine = 0;
+    return routines[this._activeRoutine];
   }
 
   /* ── Completions helpers ── */
-  _getCompletions(childId, routineKey) {
+  _getCompletions(childId, routineId) {
     const day = todayKey();
     const c = this._data.completions;
     if (!c[day]) c[day] = {};
     if (!c[day][childId]) c[day][childId] = {};
-    if (!c[day][childId][routineKey]) c[day][childId][routineKey] = {};
-    return c[day][childId][routineKey];
+    if (!c[day][childId][routineId]) c[day][childId][routineId] = {};
+    return c[day][childId][routineId];
   }
 
-  _toggleTask(childId, routineKey, taskId) {
-    const comp = this._getCompletions(childId, routineKey);
+  _toggleTask(childId, routineId, taskId) {
+    const comp = this._getCompletions(childId, routineId);
     comp[taskId] = !comp[taskId];
     this._save();
 
-    // Check if all tasks in routine are done
-    const tasks = this._data.routines[routineKey].tasks;
-    const allDone = tasks.every((t) => comp[t.id]);
-    if (allDone) {
-      setTimeout(() => {
-        const container = this.shadowRoot.querySelector(".card-container");
-        if (container) launchConfetti(container);
-      }, 150);
+    const child = this._data.children.find((c) => c.id === childId);
+    const routine = child?.routines.find((r) => r.id === routineId);
+    if (routine) {
+      const allDone = routine.tasks.every((t) => comp[t.id]);
+      if (allDone) {
+        setTimeout(() => {
+          const container = this.shadowRoot.querySelector(".card-container");
+          if (container) launchConfetti(container);
+        }, 150);
+      }
     }
-
     this._render();
   }
 
-  _getProgress(childId, routineKey) {
-    const comp = this._getCompletions(childId, routineKey);
-    const tasks = this._data.routines[routineKey].tasks;
-    if (tasks.length === 0) return 0;
-    const done = tasks.filter((t) => comp[t.id]).length;
-    return Math.round((done / tasks.length) * 100);
+  _getProgress(childId, routineId) {
+    const child = this._data.children.find((c) => c.id === childId);
+    const routine = child?.routines.find((r) => r.id === routineId);
+    if (!routine || routine.tasks.length === 0) return 0;
+    const comp = this._getCompletions(childId, routineId);
+    const done = routine.tasks.filter((t) => comp[t.id]).length;
+    return Math.round((done / routine.tasks.length) * 100);
   }
 
   /* ── Admin helpers ── */
   _verifyPin(entered) {
     return entered === this._data.pin;
-  }
-
-  _addTask(routineKey, name, icon) {
-    this._data.routines[routineKey].tasks.push({ id: _uid(), name, icon: icon || "✅" });
-    this._save();
-    this._render();
-  }
-
-  _removeTask(routineKey, taskId) {
-    this._data.routines[routineKey].tasks = this._data.routines[routineKey].tasks.filter(
-      (t) => t.id !== taskId
-    );
-    this._save();
-    this._render();
-  }
-
-  _updateTask(routineKey, taskId, name, icon) {
-    const t = this._data.routines[routineKey].tasks.find((t) => t.id === taskId);
-    if (t) {
-      t.name = name;
-      t.icon = icon;
-    }
-    this._save();
-    this._render();
-  }
-
-  _addChild(name, avatar) {
-    this._data.children.push({ id: _uid(), name, avatar: avatar || "👦" });
-    this._save();
-    this._render();
-  }
-
-  _removeChild(childId) {
-    this._data.children = this._data.children.filter((c) => c.id !== childId);
-    if (this._selectedChild >= this._data.children.length)
-      this._selectedChild = Math.max(0, this._data.children.length - 1);
-    this._save();
-    this._render();
-  }
-
-  _updateChild(childId, name, avatar) {
-    const c = this._data.children.find((c) => c.id === childId);
-    if (c) {
-      c.name = name;
-      c.avatar = avatar;
-    }
-    this._save();
-    this._render();
   }
 
   _changePin(newPin) {
@@ -421,8 +422,7 @@ class BoerneRutinerCard extends HTMLElement {
       return;
     }
 
-    const child =
-      this._data.children.length > 0 ? this._data.children[this._selectedChild] : null;
+    const child = this._currentChild();
 
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
@@ -454,11 +454,11 @@ class BoerneRutinerCard extends HTMLElement {
   /* ── Main child view ── */
   _renderMain(child) {
     if (!child) return `<div class="empty">No children added. Open settings to add one.</div>`;
-
+    const routine = this._currentRoutine(child);
     return `
       ${this._renderChildTabs()}
-      ${this._renderRoutineTabs()}
-      ${this._renderTasks(child)}
+      ${this._renderRoutineTabs(child)}
+      ${routine ? this._renderTasks(child, routine) : `<div class="empty">No routines yet.</div>`}
     `;
   }
 
@@ -479,18 +479,17 @@ class BoerneRutinerCard extends HTMLElement {
     `;
   }
 
-  _renderRoutineTabs() {
-    const keys = Object.keys(this._data.routines);
+  _renderRoutineTabs(child) {
+    const routines = this._childRoutines(child);
+    if (routines.length === 0) return "";
     return `
       <div class="routine-tabs">
-        ${keys
-          .map((k) => {
-            const r = this._data.routines[k];
-            const child = this._data.children[this._selectedChild];
-            const pct = child ? this._getProgress(child.id, k) : 0;
+        ${routines
+          .map((r, i) => {
+            const pct = this._getProgress(child.id, r.id);
             return `
-            <button class="routine-tab ${k === this._activeRoutine ? "active" : ""}"
-                    data-action="select-routine" data-key="${k}"
+            <button class="routine-tab ${i === this._activeRoutine ? "active" : ""}"
+                    data-action="select-routine" data-index="${i}"
                     style="--routine-color: ${r.color}">
               <span class="routine-icon">${r.icon}</span>
               <span class="routine-label">${r.name}</span>
@@ -502,13 +501,10 @@ class BoerneRutinerCard extends HTMLElement {
     `;
   }
 
-  _renderTasks(child) {
-    const rk = this._activeRoutine;
-    const routine = this._data.routines[rk];
-    if (!routine) return "";
-    const comp = this._getCompletions(child.id, rk);
-    const pct = this._getProgress(child.id, rk);
-    const allDone = pct === 100;
+  _renderTasks(child, routine) {
+    const comp = this._getCompletions(child.id, routine.id);
+    const pct = this._getProgress(child.id, routine.id);
+    const allDone = pct === 100 && routine.tasks.length > 0;
 
     return `
       <div class="tasks-section">
@@ -521,7 +517,7 @@ class BoerneRutinerCard extends HTMLElement {
             .map(
               (t) => `
             <button class="task-item ${comp[t.id] ? "done" : ""}"
-                    data-action="toggle-task" data-routine="${rk}" data-task="${t.id}">
+                    data-action="toggle-task" data-routine="${routine.id}" data-task="${t.id}">
               <span class="task-check">${comp[t.id] ? "✅" : "⬜"}</span>
               <span class="task-icon">${t.icon}</span>
               <span class="task-name">${t.name}</span>
@@ -534,46 +530,26 @@ class BoerneRutinerCard extends HTMLElement {
     `;
   }
 
-  /* ── Admin panel ── */
+  /* ══════════════════════════════════
+     ADMIN PANEL
+     ══════════════════════════════════ */
   _renderAdmin() {
     if (!this._adminUnlocked) {
-      return `
-        <div class="pin-entry">
-          <div class="pin-title">🔒 Parent Login</div>
-          <div class="pin-subtitle">Enter PIN to access settings</div>
-          <div class="pin-dots">
-            <span class="pin-dot ${this._pinBuffer?.length >= 1 ? "filled" : ""}"></span>
-            <span class="pin-dot ${this._pinBuffer?.length >= 2 ? "filled" : ""}"></span>
-            <span class="pin-dot ${this._pinBuffer?.length >= 3 ? "filled" : ""}"></span>
-            <span class="pin-dot ${this._pinBuffer?.length >= 4 ? "filled" : ""}"></span>
-          </div>
-          ${this._pinError ? `<div class="pin-error">Incorrect PIN</div>` : ""}
-          <div class="pin-pad">
-            ${[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"]
-              .map(
-                (n) =>
-                  n === ""
-                    ? `<div class="pin-key empty"></div>`
-                    : `<button class="pin-key" data-action="pin-key" data-key="${n}">${n}</button>`
-              )
-              .join("")}
-          </div>
-        </div>
-      `;
+      return this._renderPinEntry();
     }
 
     return `
       <div class="admin-panel">
         <div class="admin-tabs">
           <button class="admin-tab ${this._adminView === "tasks" ? "active" : ""}"
-                  data-action="admin-view" data-view="tasks">📝 Tasks</button>
+                  data-action="admin-view" data-view="tasks">📝 Routines</button>
           <button class="admin-tab ${this._adminView === "children" ? "active" : ""}"
                   data-action="admin-view" data-view="children">👶 Children</button>
           <button class="admin-tab ${this._adminView === "pin" ? "active" : ""}"
                   data-action="admin-view" data-view="pin">🔑 PIN</button>
         </div>
         <div class="admin-content">
-          ${this._adminView === "tasks" ? this._renderAdminTasks() : ""}
+          ${this._adminView === "tasks" ? this._renderAdminRoutines() : ""}
           ${this._adminView === "children" ? this._renderAdminChildren() : ""}
           ${this._adminView === "pin" ? this._renderAdminPin() : ""}
         </div>
@@ -581,29 +557,110 @@ class BoerneRutinerCard extends HTMLElement {
     `;
   }
 
-  _renderAdminTasks() {
-    const keys = Object.keys(this._data.routines);
+  _renderPinEntry() {
     return `
-      <div class="admin-tasks">
-        <div class="admin-routine-tabs">
-          ${keys
+      <div class="pin-entry">
+        <div class="pin-title">🔒 Parent Login</div>
+        <div class="pin-subtitle">Enter PIN to access settings</div>
+        <div class="pin-dots">
+          <span class="pin-dot ${this._pinBuffer?.length >= 1 ? "filled" : ""}"></span>
+          <span class="pin-dot ${this._pinBuffer?.length >= 2 ? "filled" : ""}"></span>
+          <span class="pin-dot ${this._pinBuffer?.length >= 3 ? "filled" : ""}"></span>
+          <span class="pin-dot ${this._pinBuffer?.length >= 4 ? "filled" : ""}"></span>
+        </div>
+        ${this._pinError ? `<div class="pin-error">Incorrect PIN</div>` : ""}
+        <div class="pin-pad">
+          ${[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"]
             .map(
-              (k) => `
-            <button class="admin-routine-tab ${k === this._adminRoutine || (!this._adminRoutine && k === keys[0]) ? "active" : ""}"
-                    data-action="admin-routine" data-key="${k}">
-              ${this._data.routines[k].icon} ${this._data.routines[k].name}
-            </button>`
+              (n) =>
+                n === ""
+                  ? `<div class="pin-key empty"></div>`
+                  : `<button class="pin-key" data-action="pin-key" data-key="${n}">${n}</button>`
             )
             .join("")}
         </div>
-        ${this._renderAdminTaskList(this._adminRoutine || keys[0])}
       </div>
     `;
   }
 
-  _renderAdminTaskList(routineKey) {
-    const routine = this._data.routines[routineKey];
-    if (!routine) return "";
+  /* ── Admin: Routines & Tasks (per child) ── */
+  _renderAdminRoutines() {
+    const children = this._data.children;
+    if (children.length === 0) return `<div class="empty">Add a child first.</div>`;
+    if (this._adminChild >= children.length) this._adminChild = 0;
+    const child = children[this._adminChild];
+    const routines = child.routines || [];
+    if (this._adminRoutine >= routines.length) this._adminRoutine = Math.max(0, routines.length - 1);
+    const routine = routines[this._adminRoutine];
+
+    return `
+      <div class="admin-tasks">
+        <!-- Child selector -->
+        <div class="admin-child-selector">
+          ${children
+            .map(
+              (c, i) => `
+            <button class="child-tab small ${i === this._adminChild ? "active" : ""}"
+                    data-action="admin-select-child" data-index="${i}">
+              <span class="child-avatar">${c.avatar}</span>
+              <span class="child-name">${c.name}</span>
+            </button>`
+            )
+            .join("")}
+        </div>
+
+        <!-- Routine tabs + add button -->
+        <div class="admin-routine-tabs">
+          ${routines
+            .map(
+              (r, i) => `
+            <button class="admin-routine-tab ${i === this._adminRoutine ? "active" : ""}"
+                    data-action="admin-routine" data-index="${i}"
+                    style="--tab-color: ${r.color}">
+              ${r.icon} ${r.name}
+            </button>`
+            )
+            .join("")}
+          <button class="admin-routine-tab add-routine-tab" data-action="add-routine">➕</button>
+        </div>
+
+        ${routine ? this._renderAdminRoutineDetail(child, routine) : `<div class="empty">No routines. Click ➕ to add one.</div>`}
+      </div>
+    `;
+  }
+
+  _renderAdminRoutineDetail(child, routine) {
+    const isEditingRoutine = this._editingRoutine && this._editingRoutine.id === routine.id;
+
+    return `
+      <!-- Routine settings -->
+      <div class="routine-settings">
+        ${isEditingRoutine ? `
+        <div class="routine-edit-row">
+          <input type="text" class="form-input inline-icon-input" id="edit-routine-icon" value="${this._editingRoutine.icon}" maxlength="4">
+          <input type="text" class="form-input inline-name-input" id="edit-routine-name" value="${this._editingRoutine.name}">
+          <input type="color" class="color-input" id="edit-routine-color" value="${this._editingRoutine.color}">
+          <button class="small-btn add-btn" data-action="save-routine">💾</button>
+          <button class="small-btn" data-action="cancel-edit-routine">✕</button>
+        </div>
+        ` : `
+        <div class="routine-edit-row">
+          <span class="routine-icon">${routine.icon}</span>
+          <span class="routine-detail-name">${routine.name}</span>
+          <span class="routine-color-dot" style="background:${routine.color}"></span>
+          <button class="small-btn edit-btn" data-action="edit-routine"
+                  data-name="${routine.name}" data-icon="${routine.icon}" data-color="${routine.color}">✏️</button>
+          <button class="small-btn del-btn" data-action="delete-routine">🗑️</button>
+        </div>
+        `}
+      </div>
+
+      <!-- Task list -->
+      ${this._renderAdminTaskList(child, routine)}
+    `;
+  }
+
+  _renderAdminTaskList(child, routine) {
     const isEditing = (id) => this._editingTask && this._editingTask.id === id;
     return `
       <div class="admin-task-list">
@@ -615,18 +672,15 @@ class BoerneRutinerCard extends HTMLElement {
                    value="${this._editingTask.icon}" maxlength="4">
             <input type="text" class="form-input inline-name-input" id="edit-task-name-${t.id}"
                    value="${this._editingTask.name}">
-            <button class="small-btn add-btn" data-action="save-task"
-                    data-routine="${routineKey}" data-task="${t.id}">💾</button>
+            <button class="small-btn add-btn" data-action="save-task" data-task="${t.id}">💾</button>
             <button class="small-btn" data-action="cancel-edit-task">✕</button>
           </div>` : `
           <div class="admin-task-item">
             <span class="admin-task-icon">${t.icon}</span>
             <span class="admin-task-name">${t.name}</span>
             <button class="small-btn edit-btn" data-action="edit-task"
-                    data-routine="${routineKey}" data-task="${t.id}"
-                    data-name="${t.name}" data-icon="${t.icon}">✏️</button>
-            <button class="small-btn del-btn" data-action="delete-task"
-                    data-routine="${routineKey}" data-task="${t.id}">🗑️</button>
+                    data-task="${t.id}" data-name="${t.name}" data-icon="${t.icon}">✏️</button>
+            <button class="small-btn del-btn" data-action="delete-task" data-task="${t.id}">🗑️</button>
           </div>`
           )
           .join("")}
@@ -634,12 +688,13 @@ class BoerneRutinerCard extends HTMLElement {
           <input type="text" class="form-input" id="new-task-icon" placeholder="Icon" maxlength="4"
                  style="width:60px;text-align:center;">
           <input type="text" class="form-input" id="new-task-name" placeholder="Add new task...">
-          <button class="small-btn add-btn" data-action="add-task" data-routine="${routineKey}">➕</button>
+          <button class="small-btn add-btn" data-action="add-task">➕</button>
         </div>
       </div>
     `;
   }
 
+  /* ── Admin: Children ── */
   _renderAdminChildren() {
     const isEditing = (id) => this._editingChild && this._editingChild.id === id;
     return `
@@ -676,6 +731,7 @@ class BoerneRutinerCard extends HTMLElement {
     `;
   }
 
+  /* ── Admin: PIN ── */
   _renderAdminPin() {
     return `
       <div class="admin-pin">
@@ -694,29 +750,44 @@ class BoerneRutinerCard extends HTMLElement {
      EVENT HANDLING
      ═══════════════════ */
 
-  _doSaveTask(routineKey, taskId) {
+  /** Get the child currently being edited in admin. */
+  _adminCurrentChild() {
+    const children = this._data.children;
+    if (this._adminChild >= children.length) this._adminChild = 0;
+    return children[this._adminChild] || null;
+  }
+
+  /** Get the routine currently being edited in admin. */
+  _adminCurrentRoutine() {
+    const child = this._adminCurrentChild();
+    if (!child) return null;
+    const routines = child.routines || [];
+    if (this._adminRoutine >= routines.length) this._adminRoutine = 0;
+    return routines[this._adminRoutine] || null;
+  }
+
+  _doSaveTask(taskId) {
     const nameEl = this.shadowRoot.getElementById(`edit-task-name-${taskId}`);
     const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${taskId}`);
     const name = nameEl?.value?.trim();
     const icon = iconEl?.value?.trim() || "✅";
     if (!name) return;
     this._editingTask = null;
-    const t = this._data.routines[routineKey]?.tasks.find((t) => t.id === taskId);
-    if (t) {
-      t.name = name;
-      t.icon = icon;
-    }
+    const routine = this._adminCurrentRoutine();
+    const t = routine?.tasks.find((t) => t.id === taskId);
+    if (t) { t.name = name; t.icon = icon; }
     this._save();
     this._render();
   }
 
-  _doAddTask(routineKey) {
+  _doAddTask() {
     const nameEl = this.shadowRoot.getElementById("new-task-name");
     const iconEl = this.shadowRoot.getElementById("new-task-icon");
     const name = nameEl?.value?.trim();
     const icon = iconEl?.value?.trim() || "✅";
     if (!name) return;
-    this._data.routines[routineKey].tasks.push({ id: _uid(), name, icon });
+    const routine = this._adminCurrentRoutine();
+    if (routine) routine.tasks.push({ id: _uid(), name, icon });
     this._save();
     this._render();
   }
@@ -729,10 +800,7 @@ class BoerneRutinerCard extends HTMLElement {
     if (!name) return;
     this._editingChild = null;
     const c = this._data.children.find((c) => c.id === childId);
-    if (c) {
-      c.name = name;
-      c.avatar = avatar;
-    }
+    if (c) { c.name = name; c.avatar = avatar; }
     this._save();
     this._render();
   }
@@ -743,7 +811,22 @@ class BoerneRutinerCard extends HTMLElement {
     const name = nameEl?.value?.trim();
     const avatar = avatarEl?.value?.trim() || "👦";
     if (!name) return;
-    this._data.children.push({ id: _uid(), name, avatar });
+    this._data.children.push({ id: _uid(), name, avatar, routines: defaultRoutines() });
+    this._save();
+    this._render();
+  }
+
+  _doSaveRoutine() {
+    const nameEl = this.shadowRoot.getElementById("edit-routine-name");
+    const iconEl = this.shadowRoot.getElementById("edit-routine-icon");
+    const colorEl = this.shadowRoot.getElementById("edit-routine-color");
+    const name = nameEl?.value?.trim();
+    const icon = iconEl?.value?.trim() || "📋";
+    const color = colorEl?.value || "#FF9800";
+    if (!name) return;
+    this._editingRoutine = null;
+    const routine = this._adminCurrentRoutine();
+    if (routine) { routine.name = name; routine.icon = icon; routine.color = color; }
     this._save();
     this._render();
   }
@@ -755,42 +838,30 @@ class BoerneRutinerCard extends HTMLElement {
         if (e.key !== "Enter") return;
         e.preventDefault();
 
-        // Determine which save action to trigger
         const parent = input.closest(".admin-task-item");
         if (parent?.classList.contains("editing")) {
           const saveBtn = parent.querySelector("[data-action='save-task']");
-          if (saveBtn) {
-            this._doSaveTask(saveBtn.dataset.routine, saveBtn.dataset.task);
-            return;
-          }
+          if (saveBtn) { this._doSaveTask(saveBtn.dataset.task); return; }
         }
 
         const childParent = input.closest(".admin-child-item");
         if (childParent?.classList.contains("editing")) {
           const saveBtn = childParent.querySelector("[data-action='save-child']");
-          if (saveBtn) {
-            this._doSaveChild(saveBtn.dataset.child);
-            return;
-          }
+          if (saveBtn) { this._doSaveChild(saveBtn.dataset.child); return; }
+        }
+
+        const routineRow = input.closest(".routine-edit-row");
+        if (routineRow) {
+          const saveBtn = routineRow.querySelector("[data-action='save-routine']");
+          if (saveBtn) { this._doSaveRoutine(); return; }
         }
 
         const addForm = input.closest(".add-form");
         if (addForm) {
-          const addTaskBtn = addForm.querySelector("[data-action='add-task']");
-          if (addTaskBtn) {
-            this._doAddTask(addTaskBtn.dataset.routine);
-            return;
-          }
-          const addChildBtn = addForm.querySelector("[data-action='add-child']");
-          if (addChildBtn) {
-            this._doAddChild();
-            return;
-          }
+          if (addForm.querySelector("[data-action='add-task']")) { this._doAddTask(); return; }
+          if (addForm.querySelector("[data-action='add-child']")) { this._doAddChild(); return; }
           const savePinBtn = addForm.querySelector("[data-action='save-pin']");
-          if (savePinBtn) {
-            savePinBtn.click();
-            return;
-          }
+          if (savePinBtn) { savePinBtn.click(); return; }
         }
       });
     });
@@ -805,21 +876,20 @@ class BoerneRutinerCard extends HTMLElement {
           /* -- Main view -- */
           case "select-child":
             this._selectedChild = parseInt(btn.dataset.index);
+            this._activeRoutine = 0;
             this._render();
             break;
 
           case "select-routine":
-            this._activeRoutine = btn.dataset.key;
+            this._activeRoutine = parseInt(btn.dataset.index);
             this._render();
             break;
 
-          case "toggle-task":
-            this._toggleTask(
-              this._data.children[this._selectedChild].id,
-              btn.dataset.routine,
-              btn.dataset.task
-            );
+          case "toggle-task": {
+            const child = this._currentChild();
+            if (child) this._toggleTask(child.id, btn.dataset.routine, btn.dataset.task);
             break;
+          }
 
           /* -- Admin toggle -- */
           case "toggle-admin":
@@ -849,7 +919,8 @@ class BoerneRutinerCard extends HTMLElement {
                 if (this._verifyPin(this._pinBuffer)) {
                   this._adminUnlocked = true;
                   this._pinError = false;
-                  this._adminRoutine = Object.keys(this._data.routines)[0];
+                  this._adminChild = 0;
+                  this._adminRoutine = 0;
                 } else {
                   this._pinError = true;
                   this._pinBuffer = "";
@@ -865,23 +936,93 @@ class BoerneRutinerCard extends HTMLElement {
             this._adminView = btn.dataset.view;
             this._editingTask = null;
             this._editingChild = null;
+            this._editingRoutine = null;
             this._pinSaved = false;
             this._render();
             break;
 
-          case "admin-routine":
-            this._adminRoutine = btn.dataset.key;
+          case "admin-select-child":
+            this._adminChild = parseInt(btn.dataset.index);
+            this._adminRoutine = 0;
             this._editingTask = null;
+            this._editingRoutine = null;
             this._render();
             break;
 
+          case "admin-routine":
+            this._adminRoutine = parseInt(btn.dataset.index);
+            this._editingTask = null;
+            this._editingRoutine = null;
+            this._render();
+            break;
+
+          /* -- Routine CRUD -- */
+          case "add-routine": {
+            const child = this._adminCurrentChild();
+            if (child) {
+              const colorIdx = (child.routines?.length || 0) % ROUTINE_COLORS.length;
+              child.routines.push({
+                id: _uid(),
+                name: "New Routine",
+                icon: "📋",
+                color: ROUTINE_COLORS[colorIdx],
+                tasks: [],
+              });
+              this._adminRoutine = child.routines.length - 1;
+              this._editingRoutine = { ...child.routines[this._adminRoutine] };
+              this._save();
+              this._render();
+              setTimeout(() => {
+                const el = this.shadowRoot.getElementById("edit-routine-name");
+                if (el) { el.focus(); el.select(); }
+              }, 50);
+            }
+            break;
+          }
+
+          case "edit-routine":
+            this._editingRoutine = {
+              id: this._adminCurrentRoutine()?.id,
+              name: btn.dataset.name,
+              icon: btn.dataset.icon,
+              color: btn.dataset.color,
+            };
+            this._render();
+            setTimeout(() => {
+              const el = this.shadowRoot.getElementById("edit-routine-name");
+              if (el) el.focus();
+            }, 50);
+            break;
+
+          case "save-routine":
+            this._doSaveRoutine();
+            break;
+
+          case "cancel-edit-routine":
+            this._editingRoutine = null;
+            this._render();
+            break;
+
+          case "delete-routine": {
+            const child = this._adminCurrentChild();
+            if (child && child.routines.length > 0) {
+              child.routines.splice(this._adminRoutine, 1);
+              if (this._adminRoutine >= child.routines.length) {
+                this._adminRoutine = Math.max(0, child.routines.length - 1);
+              }
+              this._save();
+              this._render();
+            }
+            break;
+          }
+
           /* -- Task CRUD -- */
           case "save-task":
-            this._doSaveTask(btn.dataset.routine, btn.dataset.task);
+            this._doSaveTask(btn.dataset.task);
             break;
 
           case "add-task":
-            this._doAddTask(btn.dataset.routine);
+            this._doAddTask();
             break;
 
           case "edit-task":
@@ -889,7 +1030,6 @@ class BoerneRutinerCard extends HTMLElement {
               id: btn.dataset.task,
               name: btn.dataset.name,
               icon: btn.dataset.icon,
-              routine: btn.dataset.routine,
             };
             this._render();
             setTimeout(() => {
@@ -898,9 +1038,15 @@ class BoerneRutinerCard extends HTMLElement {
             }, 50);
             break;
 
-          case "delete-task":
-            this._removeTask(btn.dataset.routine, btn.dataset.task);
+          case "delete-task": {
+            const routine = this._adminCurrentRoutine();
+            if (routine) {
+              routine.tasks = routine.tasks.filter((t) => t.id !== btn.dataset.task);
+              this._save();
+              this._render();
+            }
             break;
+          }
 
           case "cancel-edit-task":
             this._editingTask = null;
@@ -930,11 +1076,14 @@ class BoerneRutinerCard extends HTMLElement {
             break;
 
           case "delete-child":
-            if (this._data.children.length <= 1) {
-              // Don't allow deleting the last child
-              break;
-            }
-            this._removeChild(btn.dataset.child);
+            if (this._data.children.length <= 1) break;
+            this._data.children = this._data.children.filter((c) => c.id !== btn.dataset.child);
+            if (this._selectedChild >= this._data.children.length)
+              this._selectedChild = Math.max(0, this._data.children.length - 1);
+            if (this._adminChild >= this._data.children.length)
+              this._adminChild = Math.max(0, this._data.children.length - 1);
+            this._save();
+            this._render();
             break;
 
           case "cancel-edit-child":
@@ -958,10 +1107,8 @@ class BoerneRutinerCard extends HTMLElement {
     });
 
     // ── Prevent save buttons from stealing focus from inputs ──
-    this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child']").forEach((btn) => {
-      btn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-      });
+    this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child'], [data-action='save-routine']").forEach((btn) => {
+      btn.addEventListener("mousedown", (e) => { e.preventDefault(); });
     });
   }
 
@@ -1001,9 +1148,7 @@ class BoerneRutinerCard extends HTMLElement {
         align-items: center;
         gap: 8px;
       }
-      .header-icon {
-        font-size: 24px;
-      }
+      .header-icon { font-size: 24px; }
       .header-title {
         font-size: 20px;
         font-weight: 700;
@@ -1018,16 +1163,17 @@ class BoerneRutinerCard extends HTMLElement {
         border-radius: 8px;
         transition: background 0.2s;
       }
-      .icon-btn:hover {
-        background: rgba(0,0,0,0.06);
-      }
+      .icon-btn:hover { background: rgba(0,0,0,0.06); }
 
       /* ── Child tabs ── */
-      .child-tabs {
+      .child-tabs, .admin-child-selector {
         display: flex;
         gap: 6px;
         padding: 4px 16px 8px;
         overflow-x: auto;
+      }
+      .admin-child-selector {
+        padding: 0 0 12px;
       }
       .child-tab {
         display: flex;
@@ -1045,20 +1191,20 @@ class BoerneRutinerCard extends HTMLElement {
         white-space: nowrap;
         font-family: inherit;
       }
-      .child-tab:hover {
-        border-color: var(--primary);
+      .child-tab.small {
+        padding: 6px 12px;
+        font-size: 13px;
       }
+      .child-tab:hover { border-color: var(--primary); }
       .child-tab.active {
         background: var(--primary);
         color: #fff;
         border-color: var(--primary);
       }
-      .child-avatar {
-        font-size: 18px;
-      }
-      .child-name {
-        font-size: 14px;
-      }
+      .child-avatar { font-size: 18px; }
+      .child-name { font-size: 14px; }
+      .child-tab.small .child-avatar { font-size: 16px; }
+      .child-tab.small .child-name { font-size: 12px; }
 
       /* ── Routine tabs ── */
       .routine-tabs {
@@ -1082,16 +1228,12 @@ class BoerneRutinerCard extends HTMLElement {
         min-width: 90px;
         font-family: inherit;
       }
-      .routine-tab:hover {
-        border-color: var(--routine-color, var(--primary));
-      }
+      .routine-tab:hover { border-color: var(--routine-color, var(--primary)); }
       .routine-tab.active {
         border-color: var(--routine-color, var(--primary));
         background: color-mix(in srgb, var(--routine-color, var(--primary)) 12%, transparent);
       }
-      .routine-icon {
-        font-size: 22px;
-      }
+      .routine-icon { font-size: 22px; }
       .routine-label {
         font-size: 11px;
         font-weight: 600;
@@ -1138,9 +1280,7 @@ class BoerneRutinerCard extends HTMLElement {
       }
 
       /* ── Tasks ── */
-      .tasks-section {
-        padding: 0 8px 8px;
-      }
+      .tasks-section { padding: 0 8px 8px; }
       .task-list {
         display: flex;
         flex-direction: column;
@@ -1161,12 +1301,8 @@ class BoerneRutinerCard extends HTMLElement {
         text-align: left;
         font-family: inherit;
       }
-      .task-item:hover {
-        background: rgba(0,0,0,0.05);
-      }
-      .task-item.done {
-        background: rgba(76, 175, 80, 0.08);
-      }
+      .task-item:hover { background: rgba(0,0,0,0.05); }
+      .task-item.done { background: rgba(76, 175, 80, 0.08); }
       .task-item.done .task-name {
         text-decoration: line-through;
         opacity: 0.6;
@@ -1175,12 +1311,8 @@ class BoerneRutinerCard extends HTMLElement {
         font-size: 22px;
         transition: transform 0.2s;
       }
-      .task-item:active .task-check {
-        transform: scale(1.3);
-      }
-      .task-icon {
-        font-size: 20px;
-      }
+      .task-item:active .task-check { transform: scale(1.3); }
+      .task-icon { font-size: 20px; }
       .task-name {
         font-size: 16px;
         font-weight: 500;
@@ -1221,14 +1353,9 @@ class BoerneRutinerCard extends HTMLElement {
         color: var(--text-secondary);
         margin-bottom: 20px;
       }
-      .pin-dots {
-        display: flex;
-        gap: 12px;
-        margin-bottom: 8px;
-      }
+      .pin-dots { display: flex; gap: 12px; margin-bottom: 8px; }
       .pin-dot {
-        width: 16px;
-        height: 16px;
+        width: 16px; height: 16px;
         border-radius: 50%;
         border: 2px solid var(--divider);
         transition: all 0.2s;
@@ -1256,8 +1383,7 @@ class BoerneRutinerCard extends HTMLElement {
         margin-top: 12px;
       }
       .pin-key {
-        width: 64px;
-        height: 56px;
+        width: 64px; height: 56px;
         border-radius: 12px;
         border: 1px solid var(--divider);
         background: var(--bg);
@@ -1268,9 +1394,7 @@ class BoerneRutinerCard extends HTMLElement {
         color: var(--text);
         font-family: inherit;
       }
-      .pin-key:hover {
-        background: rgba(0,0,0,0.05);
-      }
+      .pin-key:hover { background: rgba(0,0,0,0.05); }
       .pin-key:active {
         transform: scale(0.95);
         background: rgba(0,0,0,0.1);
@@ -1282,9 +1406,7 @@ class BoerneRutinerCard extends HTMLElement {
       }
 
       /* ── Admin panel ── */
-      .admin-panel {
-        padding: 0 16px 16px;
-      }
+      .admin-panel { padding: 0 16px 16px; }
       .admin-tabs {
         display: flex;
         gap: 4px;
@@ -1312,10 +1434,10 @@ class BoerneRutinerCard extends HTMLElement {
         display: flex;
         gap: 4px;
         margin-bottom: 12px;
+        overflow-x: auto;
       }
       .admin-routine-tab {
-        flex: 1;
-        padding: 8px;
+        padding: 8px 12px;
         border: 2px solid var(--divider);
         border-radius: 8px;
         background: transparent;
@@ -1326,10 +1448,54 @@ class BoerneRutinerCard extends HTMLElement {
         transition: all 0.2s;
         text-align: center;
         font-family: inherit;
+        white-space: nowrap;
       }
       .admin-routine-tab.active {
-        border-color: var(--primary);
+        border-color: var(--tab-color, var(--primary));
         background: rgba(92, 107, 192, 0.08);
+      }
+      .add-routine-tab {
+        border-style: dashed;
+        color: var(--text-secondary);
+        min-width: 42px;
+      }
+      .add-routine-tab:hover {
+        border-color: #4CAF50;
+        background: rgba(76, 175, 80, 0.08);
+      }
+
+      /* ── Routine settings row ── */
+      .routine-settings {
+        margin-bottom: 12px;
+      }
+      .routine-edit-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.03);
+      }
+      .routine-detail-name {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .routine-color-dot {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .color-input {
+        width: 34px;
+        height: 34px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        padding: 0;
+        background: transparent;
       }
 
       /* ── Admin task list ── */
@@ -1342,9 +1508,7 @@ class BoerneRutinerCard extends HTMLElement {
         background: rgba(0,0,0,0.02);
         margin-bottom: 4px;
       }
-      .admin-task-icon, .admin-child-avatar {
-        font-size: 20px;
-      }
+      .admin-task-icon, .admin-child-avatar { font-size: 20px; }
       .admin-task-name, .admin-child-name {
         flex: 1;
         font-size: 14px;
@@ -1352,8 +1516,7 @@ class BoerneRutinerCard extends HTMLElement {
         color: var(--text);
       }
       .small-btn {
-        width: 34px;
-        height: 34px;
+        width: 34px; height: 34px;
         border: none;
         border-radius: 8px;
         background: rgba(0,0,0,0.05);
@@ -1364,18 +1527,13 @@ class BoerneRutinerCard extends HTMLElement {
         justify-content: center;
         transition: all 0.15s;
       }
-      .small-btn:hover {
-        background: rgba(0,0,0,0.1);
-      }
-      .del-btn:hover {
-        background: rgba(229, 57, 53, 0.15);
-      }
+      .small-btn:hover { background: rgba(0,0,0,0.1); }
+      .del-btn:hover { background: rgba(229, 57, 53, 0.15); }
       .add-btn {
         background: rgba(76, 175, 80, 0.12);
       }
-      .add-btn:hover {
-        background: rgba(76, 175, 80, 0.25);
-      }
+      .add-btn:hover { background: rgba(76, 175, 80, 0.25); }
+      .edit-btn:hover { background: rgba(33, 150, 243, 0.15); }
 
       /* ── Inline editing ── */
       .admin-task-item.editing,
@@ -1389,9 +1547,7 @@ class BoerneRutinerCard extends HTMLElement {
         text-align: center;
         flex: 0 0 50px;
       }
-      .inline-name-input {
-        flex: 1;
-      }
+      .inline-name-input { flex: 1; }
 
       .add-form {
         display: flex;
@@ -1417,19 +1573,14 @@ class BoerneRutinerCard extends HTMLElement {
         border-color: var(--primary);
       }
 
-      .admin-pin {
-        text-align: center;
-        padding: 16px;
-      }
+      .admin-pin { text-align: center; padding: 16px; }
       .admin-pin-label {
         font-size: 14px;
         font-weight: 600;
         color: var(--text);
         margin-bottom: 12px;
       }
-      .admin-pin .add-form {
-        justify-content: center;
-      }
+      .admin-pin .add-form { justify-content: center; }
       .pin-saved {
         color: #4CAF50;
         font-weight: 600;

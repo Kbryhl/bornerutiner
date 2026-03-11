@@ -2,6 +2,20 @@
 
 All notable changes to BørneRutiner will be documented in this file.
 
+## [1.5.0] - 2026-03-12
+
+### Changed
+- **Per-child routines** — each child now has their own independent set of routines. Morning routines for one child can have completely different tasks, names, icons, and colors than another child's.
+- New children are created with a copy of the default routines (Morning, After School, Evening) which can then be customised independently.
+- Routine tabs in the main view now reflect the selected child's routines.
+
+### Added
+- **Add / remove routines** — parents can add unlimited routines per child, not just the original three. Each routine gets an auto-assigned color.
+- **Edit routine name, icon & color** — inline editing for routine properties with a color picker.
+- **Delete routines** — remove routines that are no longer needed.
+- Child selector inside the admin Routines tab to switch between children.
+- Automatic data migration from old global-routines format to new per-child format.
+
 ## [1.4.0] - 2026-03-11
 
 ### Changed
