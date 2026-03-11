@@ -7,7 +7,8 @@
  */
 
 const STORAGE_KEY = "boerne-rutiner";
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
+const SYNC_INTERVAL_MS = 30000; // Re‑fetch data from HA every 30 s
 
 /* ───────── Default data ───────── */
 function defaultData() {
@@ -180,6 +181,23 @@ class BoerneRutinerCard extends HTMLElement {
     this._adminView = "tasks"; // tasks | children | pin
     this._editingTask = null;
     this._editingChild = null;
+    this._lastSync = 0;
+  }
+
+  /* ── Lifecycle (visibility‑based refresh) ── */
+  connectedCallback() {
+    this._onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && this._hass && this._dataLoaded) {
+        this._resync();
+      }
+    };
+    document.addEventListener("visibilitychange", this._onVisibilityChange);
+  }
+
+  disconnectedCallback() {
+    if (this._onVisibilityChange) {
+      document.removeEventListener("visibilitychange", this._onVisibilityChange);
+    }
   }
 
   /* ── Lovelace interface ── */
@@ -195,6 +213,12 @@ class BoerneRutinerCard extends HTMLElement {
     this._hass = hass;
     if (!hadHass && hass && !this._dataLoaded) {
       this._loadFromHA();
+    } else if (this._dataLoaded && hass) {
+      // Periodic background sync so other devices' changes appear
+      const now = Date.now();
+      if (now - this._lastSync > SYNC_INTERVAL_MS) {
+        this._resync();
+      }
     }
   }
 
@@ -205,10 +229,32 @@ class BoerneRutinerCard extends HTMLElement {
       this._data._pinOverridden = true;
     }
     this._dataLoaded = true;
+    this._lastSync = Date.now();
     this._render();
   }
 
+  /** Re‑fetch data from HA; only re‑render when something actually changed. */
+  async _resync() {
+    this._lastSync = Date.now();
+    try {
+      const result = await this._hass.callWS({
+        type: "frontend/get_user_data",
+        key: STORAGE_KEY,
+      });
+      if (result && result.value) {
+        const fresh = ensureStructure(result.value);
+        if (JSON.stringify(fresh) !== JSON.stringify(this._data)) {
+          this._data = fresh;
+          this._render();
+        }
+      }
+    } catch (_) {
+      /* silent – will retry on next interval */
+    }
+  }
+
   _save() {
+    this._lastSync = Date.now(); // avoid re‑fetching what we just wrote
     saveDataHA(this._hass, this._data);
   }
 
