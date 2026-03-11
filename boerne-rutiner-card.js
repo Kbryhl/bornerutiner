@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.0.0
+ * Version: 1.0.1
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
@@ -616,8 +616,9 @@ class BoerneRutinerCard extends HTMLElement {
               (r, i) => `
             <button class="admin-routine-tab ${i === this._adminRoutine ? "active" : ""}"
                     data-action="admin-routine" data-index="${i}"
+                    draggable="true" data-drag-type="routine" data-drag-index="${i}"
                     style="--tab-color: ${r.color}">
-              ${r.icon} ${r.name}
+              <span class="drag-handle-inline" data-drag-grip>⠿</span> ${r.icon} ${r.name}
             </button>`
             )
             .join("")}
@@ -678,7 +679,8 @@ class BoerneRutinerCard extends HTMLElement {
             <button class="small-btn add-btn" data-action="save-task" data-task="${t.id}">💾</button>
             <button class="small-btn" data-action="cancel-edit-task">✕</button>
           </div>` : `
-          <div class="admin-task-item">
+          <div class="admin-task-item" draggable="true" data-drag-type="task" data-drag-id="${t.id}">
+            <span class="drag-handle" data-drag-grip>☰</span>
             <span class="admin-task-icon">${t.icon}</span>
             <span class="admin-task-name">${t.name}</span>
             <button class="small-btn edit-btn" data-action="edit-task"
@@ -1134,6 +1136,179 @@ class BoerneRutinerCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child'], [data-action='save-routine']").forEach((btn) => {
       btn.addEventListener("mousedown", (e) => { e.preventDefault(); });
     });
+
+    // ── Drag & drop for tasks and routines ──
+    this._attachDragAndDrop();
+  }
+
+  _attachDragAndDrop() {
+    const shadow = this.shadowRoot;
+    let dragType = null;
+    let dragId = null;
+    let dragIndex = null;
+
+    shadow.querySelectorAll("[data-drag-type]").forEach((el) => {
+      el.addEventListener("dragstart", (e) => {
+        dragType = el.dataset.dragType;
+        dragId = el.dataset.dragId || null;
+        dragIndex = el.dataset.dragIndex != null ? parseInt(el.dataset.dragIndex) : null;
+        el.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "");
+      });
+
+      el.addEventListener("dragend", () => {
+        el.classList.remove("dragging");
+        shadow.querySelectorAll(".drag-over").forEach((d) => d.classList.remove("drag-over"));
+        dragType = null;
+        dragId = null;
+        dragIndex = null;
+      });
+
+      el.addEventListener("dragover", (e) => {
+        if (!dragType) return;
+        const targetType = el.dataset.dragType;
+        if (targetType !== dragType) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        shadow.querySelectorAll(".drag-over").forEach((d) => d.classList.remove("drag-over"));
+        el.classList.add("drag-over");
+      });
+
+      el.addEventListener("dragleave", () => {
+        el.classList.remove("drag-over");
+      });
+
+      el.addEventListener("drop", (e) => {
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const targetType = el.dataset.dragType;
+        if (targetType !== dragType) return;
+
+        if (dragType === "task") {
+          const targetId = el.dataset.dragId;
+          if (!dragId || dragId === targetId) return;
+          const routine = this._adminCurrentRoutine();
+          if (!routine) return;
+          const tasks = routine.tasks;
+          const fromIdx = tasks.findIndex((t) => t.id === dragId);
+          const toIdx = tasks.findIndex((t) => t.id === targetId);
+          if (fromIdx === -1 || toIdx === -1) return;
+          const [moved] = tasks.splice(fromIdx, 1);
+          tasks.splice(toIdx, 0, moved);
+          this._save();
+          this._render();
+        }
+
+        if (dragType === "routine") {
+          const targetIndex = parseInt(el.dataset.dragIndex);
+          if (dragIndex == null || dragIndex === targetIndex) return;
+          const child = this._adminCurrentChild();
+          if (!child) return;
+          const routines = child.routines;
+          const [moved] = routines.splice(dragIndex, 1);
+          routines.splice(targetIndex, 0, moved);
+          this._adminRoutine = targetIndex;
+          this._save();
+          this._render();
+        }
+      });
+    });
+
+    // ── Touch drag support for mobile ──
+    let touchDragEl = null;
+    let touchClone = null;
+    let touchType = null;
+    let touchStartY = 0;
+    let touchMoved = false;
+
+    shadow.querySelectorAll("[data-drag-grip]").forEach((grip) => {
+      grip.addEventListener("touchstart", (e) => {
+        const item = grip.closest("[data-drag-type]");
+        if (!item) return;
+        touchDragEl = item;
+        touchType = item.dataset.dragType;
+        touchStartY = e.touches[0].clientY;
+        touchMoved = false;
+
+        touchClone = item.cloneNode(true);
+        touchClone.classList.add("drag-clone");
+        const rect = item.getBoundingClientRect();
+        const hostRect = this.getBoundingClientRect();
+        touchClone.style.width = rect.width + "px";
+        touchClone.style.left = (rect.left - hostRect.left) + "px";
+        touchClone.style.top = (rect.top - hostRect.top) + "px";
+        shadow.querySelector(".card-container").appendChild(touchClone);
+        item.classList.add("dragging");
+      }, { passive: true });
+    });
+
+    const onTouchMove = (e) => {
+      if (!touchDragEl || !touchClone) return;
+      const touch = e.touches[0];
+      const dy = touch.clientY - touchStartY;
+      if (Math.abs(dy) > 5) touchMoved = true;
+      if (!touchMoved) return;
+      e.preventDefault();
+      const hostRect = this.getBoundingClientRect();
+      const origRect = touchDragEl.getBoundingClientRect();
+      touchClone.style.top = (origRect.top - hostRect.top + dy) + "px";
+
+      // Highlight drop target
+      shadow.querySelectorAll(".drag-over").forEach((d) => d.classList.remove("drag-over"));
+      const elemBelow = shadow.elementFromPoint(touch.clientX - hostRect.left, touch.clientY - hostRect.top);
+      const target = elemBelow?.closest(`[data-drag-type='${touchType}']`);
+      if (target && target !== touchDragEl) target.classList.add("drag-over");
+    };
+
+    const onTouchEnd = () => {
+      if (!touchDragEl) return;
+      const overEl = shadow.querySelector(".drag-over");
+      if (overEl && touchMoved) {
+        if (touchType === "task") {
+          const fromId = touchDragEl.dataset.dragId;
+          const toId = overEl.dataset.dragId;
+          if (fromId && toId && fromId !== toId) {
+            const routine = this._adminCurrentRoutine();
+            if (routine) {
+              const tasks = routine.tasks;
+              const fromIdx = tasks.findIndex((t) => t.id === fromId);
+              const toIdx = tasks.findIndex((t) => t.id === toId);
+              if (fromIdx !== -1 && toIdx !== -1) {
+                const [moved] = tasks.splice(fromIdx, 1);
+                tasks.splice(toIdx, 0, moved);
+                this._save();
+              }
+            }
+          }
+        }
+        if (touchType === "routine") {
+          const fromIdx = parseInt(touchDragEl.dataset.dragIndex);
+          const toIdx = parseInt(overEl.dataset.dragIndex);
+          if (!isNaN(fromIdx) && !isNaN(toIdx) && fromIdx !== toIdx) {
+            const child = this._adminCurrentChild();
+            if (child) {
+              const [moved] = child.routines.splice(fromIdx, 1);
+              child.routines.splice(toIdx, 0, moved);
+              this._adminRoutine = toIdx;
+              this._save();
+            }
+          }
+        }
+      }
+      touchDragEl.classList.remove("dragging");
+      shadow.querySelectorAll(".drag-over").forEach((d) => d.classList.remove("drag-over"));
+      if (touchClone) touchClone.remove();
+      touchDragEl = null;
+      touchClone = null;
+      touchType = null;
+      touchMoved = false;
+      this._render();
+    };
+
+    shadow.addEventListener("touchmove", onTouchMove, { passive: false });
+    shadow.addEventListener("touchend", onTouchEnd);
+    shadow.addEventListener("touchcancel", onTouchEnd);
   }
 
   /* ═══════════════════
@@ -1552,6 +1727,48 @@ class BoerneRutinerCard extends HTMLElement {
         border-radius: 8px;
         background: rgba(0,0,0,0.02);
         margin-bottom: 4px;
+        transition: transform 0.15s, opacity 0.15s, background 0.15s;
+      }
+
+      /* ── Drag & Drop ── */
+      .drag-handle {
+        cursor: grab;
+        opacity: 0.35;
+        font-size: 14px;
+        padding: 2px 4px;
+        user-select: none;
+        touch-action: none;
+      }
+      .drag-handle:hover { opacity: 0.7; }
+      .drag-handle-inline {
+        opacity: 0.3;
+        font-size: 10px;
+        user-select: none;
+        touch-action: none;
+        cursor: grab;
+      }
+      .drag-handle-inline:hover { opacity: 0.6; }
+      .dragging {
+        opacity: 0.3 !important;
+      }
+      .drag-over {
+        background: rgba(92, 107, 192, 0.15) !important;
+        transform: scale(1.02);
+      }
+      .drag-clone {
+        position: absolute;
+        z-index: 200;
+        pointer-events: none;
+        opacity: 0.85;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        border-radius: 8px;
+        background: var(--bg);
+      }
+      [draggable='true'] {
+        cursor: grab;
+      }
+      .admin-routine-tab[draggable='true'] {
+        cursor: grab;
       }
       .admin-task-icon, .admin-child-avatar { font-size: 20px; }
       .admin-task-name, .admin-child-name {
