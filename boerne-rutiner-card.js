@@ -1275,27 +1275,6 @@ class BoerneRutinerCard extends HTMLElement {
               if (s) s.focus();
             }, 50);
             break;
-
-          case "close-icon-picker":
-            this._syncEditingState();
-            this._iconPickerTarget = null;
-            this._render();
-            break;
-
-          case "icon-picker-tab":
-            this._syncEditingState();
-            this._iconPickerTab = btn.dataset.tab;
-            this._iconPickerSearch = "";
-            this._render();
-            setTimeout(() => {
-              const s = this.shadowRoot.getElementById("icon-picker-search");
-              if (s) s.focus();
-            }, 50);
-            break;
-
-          case "pick-icon":
-            this._pickIcon(btn.dataset.icon);
-            break;
         }
       });
     });
@@ -1336,13 +1315,49 @@ class BoerneRutinerCard extends HTMLElement {
           }
           if (!html) html = `<div class="picker-empty">Ingen ikoner fundet</div>`;
           body.innerHTML = html;
-          // Re-attach click events for new icons
-          body.querySelectorAll("[data-action='pick-icon']").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              this._pickIcon(btn.dataset.icon);
-            });
-          });
+          // Click delegation is handled by the picker-body listener below
         }
+      });
+    }
+
+    // ── Icon picker: delegated click on picker body (handles both initial and search-filtered icons) ──
+    const pickerBody = this.shadowRoot.querySelector(".picker-body");
+    if (pickerBody) {
+      pickerBody.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action='pick-icon']");
+        if (btn) this._pickIcon(btn.dataset.icon);
+      });
+    }
+
+    // ── Icon picker: delegated click on overlay and tabs ──
+    const pickerEl = this.shadowRoot.querySelector(".icon-picker");
+    if (pickerEl) {
+      pickerEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action]");
+        if (!btn) return;
+        const action = btn.dataset.action;
+        if (action === "close-icon-picker") {
+          this._syncEditingState();
+          this._iconPickerTarget = null;
+          this._render();
+        } else if (action === "icon-picker-tab") {
+          this._syncEditingState();
+          this._iconPickerTab = btn.dataset.tab;
+          this._iconPickerSearch = "";
+          this._render();
+          setTimeout(() => {
+            const s = this.shadowRoot.getElementById("icon-picker-search");
+            if (s) s.focus();
+          }, 50);
+        }
+      });
+    }
+    const pickerOverlay = this.shadowRoot.querySelector(".icon-picker-overlay");
+    if (pickerOverlay) {
+      pickerOverlay.addEventListener("click", () => {
+        this._syncEditingState();
+        this._iconPickerTarget = null;
+        this._render();
       });
     }
 
