@@ -858,6 +858,53 @@ class BoerneRutinerCard extends HTMLElement {
     return routines[this._adminRoutine] || null;
   }
 
+  /** Sync current input values into editing state so re-render doesn't lose changes. */
+  _syncEditingState() {
+    if (this._editingTask) {
+      const id = this._editingTask.id;
+      const nameEl = this.shadowRoot.getElementById(`edit-task-name-${id}`);
+      const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${id}`);
+      if (nameEl) this._editingTask.name = nameEl.value;
+      if (iconEl) this._editingTask.icon = iconEl.value;
+    }
+    if (this._editingRoutine) {
+      const nameEl = this.shadowRoot.getElementById("edit-routine-name");
+      const iconEl = this.shadowRoot.getElementById("edit-routine-icon");
+      const colorEl = this.shadowRoot.getElementById("edit-routine-color");
+      if (nameEl) this._editingRoutine.name = nameEl.value;
+      if (iconEl) this._editingRoutine.icon = iconEl.value;
+      if (colorEl) this._editingRoutine.color = colorEl.value;
+    }
+    if (this._editingChild) {
+      const id = this._editingChild.id;
+      const nameEl = this.shadowRoot.getElementById(`edit-child-name-${id}`);
+      const avatarEl = this.shadowRoot.getElementById(`edit-child-avatar-${id}`);
+      if (nameEl) this._editingChild.name = nameEl.value;
+      if (avatarEl) this._editingChild.avatar = avatarEl.value;
+    }
+  }
+
+  /** Handle a picked icon from the icon picker (called from both initial render and search re-attach). */
+  _pickIcon(pickedIcon) {
+    const target = this._iconPickerTarget;
+    if (this._editingRoutine && target === "edit-routine-icon") {
+      this._editingRoutine.icon = pickedIcon;
+    } else if (this._editingTask && target?.startsWith("edit-task-icon-")) {
+      this._editingTask.icon = pickedIcon;
+    } else if (this._editingChild && target?.startsWith("edit-child-avatar-")) {
+      this._editingChild.avatar = pickedIcon;
+    } else {
+      // For "new" fields, set value after render
+      this._iconPickerTarget = null;
+      this._render();
+      const el = this.shadowRoot.getElementById(target);
+      if (el) el.value = pickedIcon;
+      return;
+    }
+    this._iconPickerTarget = null;
+    this._render();
+  }
+
   _doSaveTask(taskId) {
     const nameEl = this.shadowRoot.getElementById(`edit-task-name-${taskId}`);
     const iconEl = this.shadowRoot.getElementById(`edit-task-icon-${taskId}`);
@@ -1218,6 +1265,7 @@ class BoerneRutinerCard extends HTMLElement {
 
           /* -- Icon picker -- */
           case "open-icon-picker":
+            this._syncEditingState();
             this._iconPickerTarget = btn.dataset.target;
             this._iconPickerSearch = "";
             this._iconPickerTab = "emoji";
@@ -1229,11 +1277,13 @@ class BoerneRutinerCard extends HTMLElement {
             break;
 
           case "close-icon-picker":
+            this._syncEditingState();
             this._iconPickerTarget = null;
             this._render();
             break;
 
           case "icon-picker-tab":
+            this._syncEditingState();
             this._iconPickerTab = btn.dataset.tab;
             this._iconPickerSearch = "";
             this._render();
@@ -1243,28 +1293,9 @@ class BoerneRutinerCard extends HTMLElement {
             }, 50);
             break;
 
-          case "pick-icon": {
-            const pickedIcon = btn.dataset.icon;
-            const target = this._iconPickerTarget;
-            // Update state so re-render shows the picked icon
-            if (this._editingRoutine && target === "edit-routine-icon") {
-              this._editingRoutine.icon = pickedIcon;
-            } else if (this._editingTask && target?.startsWith("edit-task-icon-")) {
-              this._editingTask.icon = pickedIcon;
-            } else if (this._editingChild && target?.startsWith("edit-child-avatar-")) {
-              this._editingChild.avatar = pickedIcon;
-            } else {
-              // For "new" fields, set value after render
-              this._iconPickerTarget = null;
-              this._render();
-              const el = this.shadowRoot.getElementById(target);
-              if (el) el.value = pickedIcon;
-              break;
-            }
-            this._iconPickerTarget = null;
-            this._render();
+          case "pick-icon":
+            this._pickIcon(btn.dataset.icon);
             break;
-          }
         }
       });
     });
@@ -1308,10 +1339,7 @@ class BoerneRutinerCard extends HTMLElement {
           // Re-attach click events for new icons
           body.querySelectorAll("[data-action='pick-icon']").forEach((btn) => {
             btn.addEventListener("click", () => {
-              const targetInput = this.shadowRoot.getElementById(this._iconPickerTarget);
-              if (targetInput) targetInput.value = btn.dataset.icon;
-              this._iconPickerTarget = null;
-              this._render();
+              this._pickIcon(btn.dataset.icon);
             });
           });
         }
