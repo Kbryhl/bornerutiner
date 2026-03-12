@@ -83,6 +83,33 @@ const ROUTINE_COLORS = [
   "#00BCD4", "#FF5722", "#9C27B0", "#009688", "#795548",
 ];
 
+const ICON_PICKER_DATA = {
+  emoji: {
+    "👤 Personer": ["👦", "👧", "👶", "🧒", "👨", "👩", "🧑", "👴", "👵", "🧔", "👸", "🤴", "🦸", "🧙"],
+    "☀️ Morgen": ["☀️", "🌅", "⏰", "🔔", "🌤️", "🐓"],
+    "🪥 Hygiejne": ["🪥", "🧼", "🚿", "🛁", "💇", "🧴", "🪮", "💅"],
+    "👕 Tøj": ["👕", "👖", "🧥", "👟", "🧦", "👗", "👒", "🧤", "👔"],
+    "🥣 Mad": ["🥣", "🍞", "🥪", "🍎", "🥛", "🍽️", "🍳", "🧃", "🥗", "🍌", "🍕", "🥤"],
+    "📚 Skole": ["📚", "📝", "✏️", "🎒", "📐", "🏫", "📖", "🔬", "🌍", "📏", "🖊️"],
+    "⚽ Aktiviteter": ["⚽", "🏀", "🎨", "🎵", "🚲", "🎮", "📖", "🏊", "🏃", "🧘", "🎹", "🎸", "🎯", "🧩"],
+    "🏠 Hjem": ["🏠", "🧹", "🧺", "🛏️", "🪴", "🗑️", "🍽️", "🧽", "📺", "💡"],
+    "🌙 Aften": ["🌙", "⭐", "🌜", "😴", "🌟", "💤", "🧸"],
+    "🎉 Andet": ["✅", "⬜", "🎉", "⭐", "❤️", "🌈", "🐶", "🐱", "🐟", "🏆", "👍", "🎁", "💪", "🔥"],
+  },
+  mdi: {
+    "Personer": ["mdi:account", "mdi:face-man", "mdi:face-woman", "mdi:human-child", "mdi:human-male-boy", "mdi:human-female-girl", "mdi:account-group", "mdi:baby-face-outline", "mdi:face-man-shimmer"],
+    "Morgen": ["mdi:weather-sunny", "mdi:alarm", "mdi:white-balance-sunny", "mdi:coffee", "mdi:sunrise", "mdi:clock-outline"],
+    "Hygiejne": ["mdi:toothbrush", "mdi:shower-head", "mdi:hand-wash", "mdi:water", "mdi:mirror", "mdi:razor-double-edge", "mdi:lotion-outline"],
+    "Tøj": ["mdi:tshirt-crew", "mdi:shoe-sneaker", "mdi:hanger", "mdi:hat-fedora", "mdi:glasses", "mdi:bag-suitcase"],
+    "Mad": ["mdi:food-apple", "mdi:silverware-fork-knife", "mdi:cup", "mdi:bread-slice", "mdi:egg-fried", "mdi:glass-mug-variant", "mdi:food-croissant", "mdi:fruit-grapes", "mdi:carrot", "mdi:rice", "mdi:pizza"],
+    "Skole": ["mdi:school", "mdi:book-open-variant", "mdi:pencil", "mdi:backpack", "mdi:calculator", "mdi:notebook", "mdi:laptop", "mdi:earth", "mdi:ruler", "mdi:microscope"],
+    "Aktiviteter": ["mdi:soccer", "mdi:basketball", "mdi:palette", "mdi:music", "mdi:bike", "mdi:gamepad-variant", "mdi:swim", "mdi:run", "mdi:yoga", "mdi:piano", "mdi:guitar-acoustic", "mdi:tennis", "mdi:puzzle", "mdi:trophy"],
+    "Hjem": ["mdi:home", "mdi:bed", "mdi:broom", "mdi:washing-machine", "mdi:table-furniture", "mdi:lamp", "mdi:sofa", "mdi:television", "mdi:door", "mdi:trash-can-outline"],
+    "Aften": ["mdi:weather-night", "mdi:star", "mdi:moon-waning-crescent", "mdi:sleep", "mdi:power-sleep", "mdi:teddy-bear", "mdi:book-open-page-variant"],
+    "Andet": ["mdi:check-circle", "mdi:heart", "mdi:star-outline", "mdi:party-popper", "mdi:dog", "mdi:cat", "mdi:fish", "mdi:thumb-up", "mdi:fire", "mdi:flower", "mdi:lightning-bolt", "mdi:rocket-launch"],
+  },
+};
+
 /* ───────── Storage (server‑level shared entity) ───────── */
 
 /**
@@ -262,6 +289,9 @@ class BoerneRutinerCard extends HTMLElement {
     this._editingRoutine = null;
     this._lastEntityUpdate = null;
     this._lastSaveTime = 0;
+    this._iconPickerTarget = null;  // input ID the picker is filling
+    this._iconPickerTab = "emoji"; // emoji | mdi
+    this._iconPickerSearch = "";
   }
 
   /* ── Lifecycle (visibility‑based refresh) ── */
@@ -437,6 +467,7 @@ class BoerneRutinerCard extends HTMLElement {
         <div class="card-container">
           ${this._renderHeader()}
           ${this._adminMode ? this._renderAdmin() : this._renderMain(child)}
+          ${this._iconPickerTarget ? this._renderIconPicker() : ""}
         </div>
       </ha-card>
     `;
@@ -649,6 +680,7 @@ class BoerneRutinerCard extends HTMLElement {
         ${isEditingRoutine ? `
         <div class="routine-edit-row">
           <input type="text" class="form-input inline-icon-input" id="edit-routine-icon" value="${this._editingRoutine.icon}" maxlength="50">
+          <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="edit-routine-icon" title="Vælg ikon">🔍</button>
           <input type="text" class="form-input inline-name-input" id="edit-routine-name" value="${this._editingRoutine.name}">
           <input type="color" class="color-input" id="edit-routine-color" value="${this._editingRoutine.color}">
           <button class="small-btn add-btn" data-action="save-routine">💾</button>
@@ -681,6 +713,7 @@ class BoerneRutinerCard extends HTMLElement {
           <div class="admin-task-item editing">
             <input type="text" class="form-input inline-icon-input" id="edit-task-icon-${t.id}"
                    value="${this._editingTask.icon}" maxlength="50">
+            <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="edit-task-icon-${t.id}" title="Vælg ikon">🔍</button>
             <input type="text" class="form-input inline-name-input" id="edit-task-name-${t.id}"
                    value="${this._editingTask.name}">
             <button class="small-btn add-btn" data-action="save-task" data-task="${t.id}">💾</button>
@@ -697,8 +730,9 @@ class BoerneRutinerCard extends HTMLElement {
           )
           .join("")}
         <div class="add-form" id="add-task-form">
-          <input type="text" class="form-input" id="new-task-icon" placeholder="Icon / mdi:icon" maxlength="50"
-                 style="width:100px;text-align:center;">
+          <input type="text" class="form-input" id="new-task-icon" placeholder="Ikon" maxlength="50"
+                 style="width:80px;text-align:center;">
+          <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="new-task-icon" title="Vælg ikon">🔍</button>
           <input type="text" class="form-input" id="new-task-name" placeholder="Add new task...">
           <button class="small-btn add-btn" data-action="add-task">➕</button>
         </div>
@@ -717,6 +751,7 @@ class BoerneRutinerCard extends HTMLElement {
           <div class="admin-child-item editing">
             <input type="text" class="form-input inline-icon-input" id="edit-child-avatar-${c.id}"
                    value="${this._editingChild.avatar}" maxlength="50">
+            <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="edit-child-avatar-${c.id}" title="Vælg ikon">🔍</button>
             <input type="text" class="form-input inline-name-input" id="edit-child-name-${c.id}"
                    value="${this._editingChild.name}">
             <button class="small-btn add-btn" data-action="save-child"
@@ -734,11 +769,56 @@ class BoerneRutinerCard extends HTMLElement {
           )
           .join("")}
         <div class="add-form" id="add-child-form">
-          <input type="text" class="form-input" id="new-child-avatar" placeholder="Avatar / mdi:icon" maxlength="50"
-                 style="width:100px;text-align:center;">
+          <input type="text" class="form-input" id="new-child-avatar" placeholder="Avatar" maxlength="50"
+                 style="width:80px;text-align:center;">
+          <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="new-child-avatar" title="Vælg ikon">🔍</button>
           <input type="text" class="form-input" id="new-child-name" placeholder="Add new child...">
           <button class="small-btn add-btn" data-action="add-child">➕</button>
         </div>
+      </div>
+    `;
+  }
+
+  /* ── Icon Picker ── */
+  _renderIconPicker() {
+    const tab = this._iconPickerTab;
+    const search = (this._iconPickerSearch || "").toLowerCase();
+    const data = ICON_PICKER_DATA[tab];
+
+    let gridHtml = "";
+    for (const [category, icons] of Object.entries(data)) {
+      const filtered = icons.filter((ic) => {
+        if (!search) return true;
+        return ic.toLowerCase().includes(search) || category.toLowerCase().includes(search);
+      });
+      if (filtered.length === 0) continue;
+      gridHtml += `<div class="picker-category">${category}</div>`;
+      gridHtml += `<div class="picker-grid">`;
+      for (const ic of filtered) {
+        if (tab === "mdi") {
+          gridHtml += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}"><ha-icon icon="${ic}"></ha-icon></button>`;
+        } else {
+          gridHtml += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
+        }
+      }
+      gridHtml += `</div>`;
+    }
+    if (!gridHtml) gridHtml = `<div class="picker-empty">Ingen ikoner fundet</div>`;
+
+    return `
+      <div class="icon-picker-overlay" data-action="close-icon-picker"></div>
+      <div class="icon-picker">
+        <div class="picker-header">
+          <span class="picker-title">Vælg ikon</span>
+          <button class="small-btn" data-action="close-icon-picker">✕</button>
+        </div>
+        <div class="picker-tabs">
+          <button class="picker-tab ${tab === "emoji" ? "active" : ""}" data-action="icon-picker-tab" data-tab="emoji">😀 Emoji</button>
+          <button class="picker-tab ${tab === "mdi" ? "active" : ""}" data-action="icon-picker-tab" data-tab="mdi">🎨 MDI Ikoner</button>
+        </div>
+        <input type="text" class="form-input picker-search" id="icon-picker-search"
+               placeholder="Søg ikoner…" value="${this._iconPickerSearch || ""}">
+        <div class="picker-body">${gridHtml}</div>
       </div>
     `;
   }
@@ -1135,14 +1215,108 @@ class BoerneRutinerCard extends HTMLElement {
             }
             break;
           }
+
+          /* -- Icon picker -- */
+          case "open-icon-picker":
+            this._iconPickerTarget = btn.dataset.target;
+            this._iconPickerSearch = "";
+            this._iconPickerTab = "emoji";
+            this._render();
+            setTimeout(() => {
+              const s = this.shadowRoot.getElementById("icon-picker-search");
+              if (s) s.focus();
+            }, 50);
+            break;
+
+          case "close-icon-picker":
+            this._iconPickerTarget = null;
+            this._render();
+            break;
+
+          case "icon-picker-tab":
+            this._iconPickerTab = btn.dataset.tab;
+            this._iconPickerSearch = "";
+            this._render();
+            setTimeout(() => {
+              const s = this.shadowRoot.getElementById("icon-picker-search");
+              if (s) s.focus();
+            }, 50);
+            break;
+
+          case "pick-icon": {
+            const pickedIcon = btn.dataset.icon;
+            const target = this._iconPickerTarget;
+            // Update state so re-render shows the picked icon
+            if (this._editingRoutine && target === "edit-routine-icon") {
+              this._editingRoutine.icon = pickedIcon;
+            } else if (this._editingTask && target?.startsWith("edit-task-icon-")) {
+              this._editingTask.icon = pickedIcon;
+            } else if (this._editingChild && target?.startsWith("edit-child-avatar-")) {
+              this._editingChild.avatar = pickedIcon;
+            } else {
+              // For "new" fields, set value after render
+              this._iconPickerTarget = null;
+              this._render();
+              const el = this.shadowRoot.getElementById(target);
+              if (el) el.value = pickedIcon;
+              break;
+            }
+            this._iconPickerTarget = null;
+            this._render();
+            break;
+          }
         }
       });
     });
 
-    // ── Prevent save buttons from stealing focus from inputs ──
-    this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child'], [data-action='save-routine']").forEach((btn) => {
+    // ── Prevent save/picker buttons from stealing focus from inputs ──
+    this.shadowRoot.querySelectorAll("[data-action='save-task'], [data-action='save-child'], [data-action='add-task'], [data-action='add-child'], [data-action='save-routine'], [data-action='open-icon-picker']").forEach((btn) => {
       btn.addEventListener("mousedown", (e) => { e.preventDefault(); });
     });
+
+    // ── Icon picker search ──
+    const pickerSearch = this.shadowRoot.getElementById("icon-picker-search");
+    if (pickerSearch) {
+      pickerSearch.addEventListener("input", (e) => {
+        this._iconPickerSearch = e.target.value;
+        // Re-render only the picker body to avoid losing focus
+        const body = this.shadowRoot.querySelector(".picker-body");
+        if (body) {
+          const tab = this._iconPickerTab;
+          const search = (this._iconPickerSearch || "").toLowerCase();
+          const data = ICON_PICKER_DATA[tab];
+          let html = "";
+          for (const [category, icons] of Object.entries(data)) {
+            const filtered = icons.filter((ic) => {
+              if (!search) return true;
+              return ic.toLowerCase().includes(search) || category.toLowerCase().includes(search);
+            });
+            if (filtered.length === 0) continue;
+            html += `<div class="picker-category">${category}</div>`;
+            html += `<div class="picker-grid">`;
+            for (const ic of filtered) {
+              if (tab === "mdi") {
+                html += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}"><ha-icon icon="${ic}"></ha-icon></button>`;
+              } else {
+                html += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
+              }
+            }
+            html += `</div>`;
+          }
+          if (!html) html = `<div class="picker-empty">Ingen ikoner fundet</div>`;
+          body.innerHTML = html;
+          // Re-attach click events for new icons
+          body.querySelectorAll("[data-action='pick-icon']").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const targetInput = this.shadowRoot.getElementById(this._iconPickerTarget);
+              if (targetInput) targetInput.value = btn.dataset.icon;
+              this._iconPickerTarget = null;
+              this._render();
+            });
+          });
+        }
+      });
+    }
 
     // ── Drag & drop for tasks and routines ──
     this._attachDragAndDrop();
@@ -1860,6 +2034,119 @@ class BoerneRutinerCard extends HTMLElement {
         font-weight: 600;
         margin-top: 8px;
         font-size: 13px;
+      }
+
+      /* ── Icon Picker ── */
+      .icon-picker-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.3);
+        z-index: 999;
+      }
+      .icon-picker {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        background: var(--bg);
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        width: min(400px, 90vw);
+        max-height: min(520px, 80vh);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .picker-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px 8px;
+      }
+      .picker-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .picker-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 0 16px 8px;
+      }
+      .picker-tab {
+        flex: 1;
+        padding: 8px;
+        border: none;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.04);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+        font-family: inherit;
+      }
+      .picker-tab.active {
+        background: var(--primary);
+        color: #fff;
+      }
+      .picker-search {
+        margin: 0 16px 8px;
+        flex: unset;
+      }
+      .picker-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 16px 16px;
+      }
+      .picker-category {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        margin: 10px 0 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .picker-category:first-child { margin-top: 0; }
+      .picker-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+        gap: 4px;
+      }
+      .picker-icon-btn {
+        width: 42px;
+        height: 42px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.03);
+        cursor: pointer;
+        font-size: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        padding: 0;
+      }
+      .picker-icon-btn:hover {
+        background: rgba(92, 107, 192, 0.12);
+        border-color: var(--primary);
+        transform: scale(1.1);
+      }
+      .picker-icon-btn ha-icon {
+        --mdc-icon-size: 24px;
+      }
+      .picker-empty {
+        text-align: center;
+        padding: 24px;
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+      .icon-picker-btn {
+        font-size: 12px;
+        width: 30px !important;
+        height: 30px !important;
+        flex-shrink: 0;
       }
 
       /* ── Scrollbar ── */
