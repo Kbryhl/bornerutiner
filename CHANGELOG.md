@@ -2,6 +2,14 @@
 
 Alle ændringer i BørneRutiner dokumenteres her.
 
+## [1.1.0] - 2026-03-12
+
+### Tilføjet
+
+- **Icon pack-understøttelse** — Brug MDI-ikoner (f.eks. `mdi:toothbrush`, `mdi:broom`) sammen med eller i stedet for emojis. Virker på rutine-ikoner, opgave-ikoner og barn-avatarer. Alle eksisterende emojis virker stadig som før.
+
+---
+
 ## [1.0.0] - 2026-03-12
 
 Første officielle release! Alt fra de tidlige udviklingsversioner er samlet her.

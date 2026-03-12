@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.0.1
+ * Version: 1.1.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.0.1";
+const VERSION = "1.1.0";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
@@ -64,6 +64,13 @@ function defaultData() {
 /* ───────── Helpers ───────── */
 function _uid() {
   return Math.random().toString(36).substring(2, 10);
+}
+
+function _renderIcon(icon, cls) {
+  if (icon && icon.includes(":")) {
+    return `<ha-icon icon="${icon}" class="${cls}"></ha-icon>`;
+  }
+  return `<span class="${cls}">${icon || ""}</span>`;
 }
 
 function todayKey() {
@@ -470,7 +477,7 @@ class BoerneRutinerCard extends HTMLElement {
             (c, i) => `
           <button class="child-tab ${i === this._selectedChild ? "active" : ""}"
                   data-action="select-child" data-index="${i}">
-            <span class="child-avatar">${c.avatar}</span>
+            ${_renderIcon(c.avatar, "child-avatar")}
             <span class="child-name">${c.name}</span>
           </button>`
           )
@@ -491,7 +498,7 @@ class BoerneRutinerCard extends HTMLElement {
             <button class="routine-tab ${i === this._activeRoutine ? "active" : ""}"
                     data-action="select-routine" data-index="${i}"
                     style="--routine-color: ${r.color}">
-              <span class="routine-icon">${r.icon}</span>
+              ${_renderIcon(r.icon, "routine-icon")}
               <span class="routine-label">${r.name}</span>
               <span class="routine-pct">${pct}%</span>
             </button>`;
@@ -519,7 +526,7 @@ class BoerneRutinerCard extends HTMLElement {
             <button class="task-item ${comp[t.id] ? "done" : ""}"
                     data-action="toggle-task" data-routine="${routine.id}" data-task="${t.id}">
               <span class="task-check">${comp[t.id] ? "✅" : "⬜"}</span>
-              <span class="task-icon">${t.icon}</span>
+              ${_renderIcon(t.icon, "task-icon")}
               <span class="task-name">${t.name}</span>
             </button>`
             )
@@ -618,7 +625,7 @@ class BoerneRutinerCard extends HTMLElement {
                     data-action="admin-routine" data-index="${i}"
                     draggable="true" data-drag-type="routine" data-drag-index="${i}"
                     style="--tab-color: ${r.color}">
-              <span class="drag-handle-inline" data-drag-grip>⠿</span> ${r.icon} ${r.name}
+              <span class="drag-handle-inline" data-drag-grip>⠿</span> ${_renderIcon(r.icon, "admin-routine-tab-icon")} ${r.name}
             </button>`
             )
             .join("")}
@@ -641,7 +648,7 @@ class BoerneRutinerCard extends HTMLElement {
       <div class="routine-settings">
         ${isEditingRoutine ? `
         <div class="routine-edit-row">
-          <input type="text" class="form-input inline-icon-input" id="edit-routine-icon" value="${this._editingRoutine.icon}" maxlength="4">
+          <input type="text" class="form-input inline-icon-input" id="edit-routine-icon" value="${this._editingRoutine.icon}" maxlength="50">
           <input type="text" class="form-input inline-name-input" id="edit-routine-name" value="${this._editingRoutine.name}">
           <input type="color" class="color-input" id="edit-routine-color" value="${this._editingRoutine.color}">
           <button class="small-btn add-btn" data-action="save-routine">💾</button>
@@ -649,7 +656,7 @@ class BoerneRutinerCard extends HTMLElement {
         </div>
         ` : `
         <div class="routine-edit-row">
-          <span class="routine-icon">${routine.icon}</span>
+          ${_renderIcon(routine.icon, "routine-icon")}
           <span class="routine-detail-name">${routine.name}</span>
           <span class="routine-color-dot" style="background:${routine.color}"></span>
           <button class="small-btn edit-btn" data-action="edit-routine"
@@ -673,7 +680,7 @@ class BoerneRutinerCard extends HTMLElement {
             (t) => isEditing(t.id) ? `
           <div class="admin-task-item editing">
             <input type="text" class="form-input inline-icon-input" id="edit-task-icon-${t.id}"
-                   value="${this._editingTask.icon}" maxlength="4">
+                   value="${this._editingTask.icon}" maxlength="50">
             <input type="text" class="form-input inline-name-input" id="edit-task-name-${t.id}"
                    value="${this._editingTask.name}">
             <button class="small-btn add-btn" data-action="save-task" data-task="${t.id}">💾</button>
@@ -681,7 +688,7 @@ class BoerneRutinerCard extends HTMLElement {
           </div>` : `
           <div class="admin-task-item" draggable="true" data-drag-type="task" data-drag-id="${t.id}">
             <span class="drag-handle" data-drag-grip>☰</span>
-            <span class="admin-task-icon">${t.icon}</span>
+            ${_renderIcon(t.icon, "admin-task-icon")}
             <span class="admin-task-name">${t.name}</span>
             <button class="small-btn edit-btn" data-action="edit-task"
                     data-task="${t.id}" data-name="${t.name}" data-icon="${t.icon}">✏️</button>
@@ -690,8 +697,8 @@ class BoerneRutinerCard extends HTMLElement {
           )
           .join("")}
         <div class="add-form" id="add-task-form">
-          <input type="text" class="form-input" id="new-task-icon" placeholder="Icon" maxlength="4"
-                 style="width:60px;text-align:center;">
+          <input type="text" class="form-input" id="new-task-icon" placeholder="Icon / mdi:icon" maxlength="50"
+                 style="width:100px;text-align:center;">
           <input type="text" class="form-input" id="new-task-name" placeholder="Add new task...">
           <button class="small-btn add-btn" data-action="add-task">➕</button>
         </div>
@@ -709,7 +716,7 @@ class BoerneRutinerCard extends HTMLElement {
             (c) => isEditing(c.id) ? `
           <div class="admin-child-item editing">
             <input type="text" class="form-input inline-icon-input" id="edit-child-avatar-${c.id}"
-                   value="${this._editingChild.avatar}" maxlength="4">
+                   value="${this._editingChild.avatar}" maxlength="50">
             <input type="text" class="form-input inline-name-input" id="edit-child-name-${c.id}"
                    value="${this._editingChild.name}">
             <button class="small-btn add-btn" data-action="save-child"
@@ -717,7 +724,7 @@ class BoerneRutinerCard extends HTMLElement {
             <button class="small-btn" data-action="cancel-edit-child">✕</button>
           </div>` : `
           <div class="admin-child-item">
-            <span class="admin-child-avatar">${c.avatar}</span>
+            ${_renderIcon(c.avatar, "admin-child-avatar")}
             <span class="admin-child-name">${c.name}</span>
             <button class="small-btn edit-btn" data-action="edit-child"
                     data-child="${c.id}" data-name="${c.name}" data-avatar="${c.avatar}">✏️</button>
@@ -727,8 +734,8 @@ class BoerneRutinerCard extends HTMLElement {
           )
           .join("")}
         <div class="add-form" id="add-child-form">
-          <input type="text" class="form-input" id="new-child-avatar" placeholder="Avatar" maxlength="4"
-                 style="width:60px;text-align:center;">
+          <input type="text" class="form-input" id="new-child-avatar" placeholder="Avatar / mdi:icon" maxlength="50"
+                 style="width:100px;text-align:center;">
           <input type="text" class="form-input" id="new-child-name" placeholder="Add new child...">
           <button class="small-btn add-btn" data-action="add-child">➕</button>
         </div>
@@ -1401,8 +1408,10 @@ class BoerneRutinerCard extends HTMLElement {
         border-color: var(--primary);
       }
       .child-avatar { font-size: 18px; }
+      ha-icon.child-avatar { --mdc-icon-size: 18px; }
       .child-name { font-size: 14px; }
       .child-tab.small .child-avatar { font-size: 16px; }
+      .child-tab.small ha-icon.child-avatar { --mdc-icon-size: 16px; }
       .child-tab.small .child-name { font-size: 12px; }
 
       /* ── Routine tabs ── */
@@ -1433,6 +1442,7 @@ class BoerneRutinerCard extends HTMLElement {
         background: color-mix(in srgb, var(--routine-color, var(--primary)) 12%, transparent);
       }
       .routine-icon { font-size: 22px; }
+      ha-icon.routine-icon { --mdc-icon-size: 22px; }
       .routine-label {
         font-size: 11px;
         font-weight: 600;
@@ -1512,6 +1522,7 @@ class BoerneRutinerCard extends HTMLElement {
       }
       .task-item:active .task-check { transform: scale(1.3); }
       .task-icon { font-size: 20px; }
+      ha-icon.task-icon { --mdc-icon-size: 20px; }
       .task-name {
         font-size: 16px;
         font-weight: 500;
@@ -1771,6 +1782,7 @@ class BoerneRutinerCard extends HTMLElement {
         cursor: grab;
       }
       .admin-task-icon, .admin-child-avatar { font-size: 20px; }
+      ha-icon.admin-task-icon, ha-icon.admin-child-avatar, ha-icon.admin-routine-tab-icon { --mdc-icon-size: 20px; }
       .admin-task-name, .admin-child-name {
         flex: 1;
         font-size: 14px;
@@ -1805,9 +1817,9 @@ class BoerneRutinerCard extends HTMLElement {
         padding: 8px 10px;
       }
       .inline-icon-input {
-        width: 50px !important;
+        width: 100px !important;
         text-align: center;
-        flex: 0 0 50px;
+        flex: 0 0 100px;
       }
       .inline-name-input { flex: 1; }
 
