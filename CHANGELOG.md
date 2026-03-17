@@ -2,6 +2,13 @@
 
 Alle ændringer i BørneRutiner dokumenteres her.
 
+## [1.4.0] - 2026-03-17
+
+### Tilføjet
+
+- **Personlig besked ved gennemført rutine** — Forældre kan nu angive en besked for hvert barn, som vises når rutinen er gennemført.
+
+---
 ## [1.3.0] - 2026-03-17
 
 ### Tilføjet

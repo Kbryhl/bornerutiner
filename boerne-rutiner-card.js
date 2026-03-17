@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.3.0
+ * Version: 1.4.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
@@ -55,7 +55,7 @@ function defaultData() {
   return {
     pin: "1234",
     children: [
-      { id: _uid(), name: "Child 1", avatar: "👦", routines: defaultRoutines() },
+      { id: _uid(), name: "Child 1", avatar: "👦", routines: defaultRoutines(), completionMessage: "Godt klaret!" },
     ],
     completions: {},
   };
@@ -551,7 +551,7 @@ class BoerneRutinerCard extends HTMLElement {
         <div class="progress-bar-container">
           <div class="progress-bar" style="width:${pct}%; background:${routine.color}"></div>
         </div>
-        ${allDone ? `<div class="all-done">🎉 All done! Great job, ${child.name}!</div>` : ""}
+        ${allDone ? `<div class="all-done">🎉 ${child.completionMessage || "Godt klaret!"}</div>` : ""}
         <div class="task-list">
           ${routine.tasks
             .map(
@@ -756,9 +756,11 @@ class BoerneRutinerCard extends HTMLElement {
             <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="edit-child-avatar-${c.id}" title="Vælg ikon">🔍</button>
             <input type="text" class="form-input inline-name-input" id="edit-child-name-${c.id}"
                    value="${this._editingChild.name}">
-            <button class="small-btn add-btn" data-action="save-child"
-                    data-child="${c.id}">💾</button>
-            <button class="small-btn" data-action="cancel-edit-child">✕</button>
+                <input type="text" class="form-input" id="edit-child-completion-${c.id}"
+                 value="${this._editingChild.completionMessage || ''}" placeholder="Besked ved gennemført rutine">
+                <button class="small-btn add-btn" data-action="save-child"
+                  data-child="${c.id}">💾</button>
+                <button class="small-btn" data-action="cancel-edit-child">✕</button>
           </div>` : `
           <div class="admin-child-item">
             ${_renderIcon(c.avatar, "admin-child-avatar")}
@@ -775,6 +777,7 @@ class BoerneRutinerCard extends HTMLElement {
                  style="width:80px;text-align:center;">
           <button class="small-btn icon-picker-btn" data-action="open-icon-picker" data-target="new-child-avatar" title="Vælg ikon">🔍</button>
           <input type="text" class="form-input" id="new-child-name" placeholder="Add new child...">
+          <input type="text" class="form-input" id="new-child-completion" placeholder="Besked ved gennemført rutine">
           <button class="small-btn add-btn" data-action="add-child">➕</button>
         </div>
       </div>
@@ -927,12 +930,14 @@ class BoerneRutinerCard extends HTMLElement {
   _doSaveChild(childId) {
     const nameEl = this.shadowRoot.getElementById(`edit-child-name-${childId}`);
     const avatarEl = this.shadowRoot.getElementById(`edit-child-avatar-${childId}`);
+    const completionEl = this.shadowRoot.getElementById(`edit-child-completion-${childId}`);
     const name = nameEl?.value?.trim();
     const avatar = avatarEl?.value?.trim() || "👦";
+    const completionMessage = completionEl?.value?.trim() || "";
     if (!name) return;
     this._editingChild = null;
     const c = this._data.children.find((c) => c.id === childId);
-    if (c) { c.name = name; c.avatar = avatar; }
+    if (c) { c.name = name; c.avatar = avatar; c.completionMessage = completionMessage; }
     this._save();
     this._render();
   }
@@ -940,10 +945,12 @@ class BoerneRutinerCard extends HTMLElement {
   _doAddChild() {
     const nameEl = this.shadowRoot.getElementById("new-child-name");
     const avatarEl = this.shadowRoot.getElementById("new-child-avatar");
+    const completionEl = this.shadowRoot.getElementById("new-child-completion");
     const name = nameEl?.value?.trim();
     const avatar = avatarEl?.value?.trim() || "👦";
+    const completionMessage = completionEl?.value?.trim() || "Godt klaret!";
     if (!name) return;
-    this._data.children.push({ id: _uid(), name, avatar, routines: defaultRoutines() });
+    this._data.children.push({ id: _uid(), name, avatar, routines: defaultRoutines(), completionMessage });
     this._save();
     this._render();
   }
