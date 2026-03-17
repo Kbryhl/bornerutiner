@@ -2,7 +2,7 @@
 
 Et custom Home Assistant Lovelace-kort, der hjælper børn med at holde styr på deres daglige rutiner. Forældre kan styre opgaver, rutiner og børn bag en PIN-beskyttet admin-side.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

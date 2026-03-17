@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.1.0
+ * Version: 1.2.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
@@ -67,9 +67,6 @@ function _uid() {
 }
 
 function _renderIcon(icon, cls) {
-  if (icon && icon.includes(":")) {
-    return `<ha-icon icon="${icon}" class="${cls}"></ha-icon>`;
-  }
   return `<span class="${cls}">${icon || ""}</span>`;
 }
 
@@ -95,18 +92,6 @@ const ICON_PICKER_DATA = {
     "🏠 Hjem": ["🏠", "🧹", "🧺", "🛏️", "🪴", "🗑️", "🍽️", "🧽", "📺", "💡"],
     "🌙 Aften": ["🌙", "⭐", "🌜", "😴", "🌟", "💤", "🧸"],
     "🎉 Andet": ["✅", "⬜", "🎉", "⭐", "❤️", "🌈", "🐶", "🐱", "🐟", "🏆", "👍", "🎁", "💪", "🔥"],
-  },
-  mdi: {
-    "Personer": ["mdi:account", "mdi:face-man", "mdi:face-woman", "mdi:human-child", "mdi:human-male-boy", "mdi:human-female-girl", "mdi:account-group", "mdi:baby-face-outline", "mdi:face-man-shimmer"],
-    "Morgen": ["mdi:weather-sunny", "mdi:alarm", "mdi:white-balance-sunny", "mdi:coffee", "mdi:sunrise", "mdi:clock-outline"],
-    "Hygiejne": ["mdi:toothbrush", "mdi:shower-head", "mdi:hand-wash", "mdi:water", "mdi:mirror", "mdi:razor-double-edge", "mdi:lotion-outline"],
-    "Tøj": ["mdi:tshirt-crew", "mdi:shoe-sneaker", "mdi:hanger", "mdi:hat-fedora", "mdi:glasses", "mdi:bag-suitcase"],
-    "Mad": ["mdi:food-apple", "mdi:silverware-fork-knife", "mdi:cup", "mdi:bread-slice", "mdi:egg-fried", "mdi:glass-mug-variant", "mdi:food-croissant", "mdi:fruit-grapes", "mdi:carrot", "mdi:rice", "mdi:pizza"],
-    "Skole": ["mdi:school", "mdi:book-open-variant", "mdi:pencil", "mdi:backpack", "mdi:calculator", "mdi:notebook", "mdi:laptop", "mdi:earth", "mdi:ruler", "mdi:microscope"],
-    "Aktiviteter": ["mdi:soccer", "mdi:basketball", "mdi:palette", "mdi:music", "mdi:bike", "mdi:gamepad-variant", "mdi:swim", "mdi:run", "mdi:yoga", "mdi:piano", "mdi:guitar-acoustic", "mdi:tennis", "mdi:puzzle", "mdi:trophy"],
-    "Hjem": ["mdi:home", "mdi:bed", "mdi:broom", "mdi:washing-machine", "mdi:table-furniture", "mdi:lamp", "mdi:sofa", "mdi:television", "mdi:door", "mdi:trash-can-outline"],
-    "Aften": ["mdi:weather-night", "mdi:star", "mdi:moon-waning-crescent", "mdi:sleep", "mdi:power-sleep", "mdi:teddy-bear", "mdi:book-open-page-variant"],
-    "Andet": ["mdi:check-circle", "mdi:heart", "mdi:star-outline", "mdi:party-popper", "mdi:dog", "mdi:cat", "mdi:fish", "mdi:thumb-up", "mdi:fire", "mdi:flower", "mdi:lightning-bolt", "mdi:rocket-launch"],
   },
 };
 
@@ -290,7 +275,6 @@ class BoerneRutinerCard extends HTMLElement {
     this._lastEntityUpdate = null;
     this._lastSaveTime = 0;
     this._iconPickerTarget = null;  // input ID the picker is filling
-    this._iconPickerTab = "emoji"; // emoji | mdi
     this._iconPickerSearch = "";
   }
 
@@ -781,9 +765,8 @@ class BoerneRutinerCard extends HTMLElement {
 
   /* ── Icon Picker ── */
   _renderIconPicker() {
-    const tab = this._iconPickerTab;
     const search = (this._iconPickerSearch || "").toLowerCase();
-    const data = ICON_PICKER_DATA[tab];
+    const data = ICON_PICKER_DATA.emoji;
 
     let gridHtml = "";
     for (const [category, icons] of Object.entries(data)) {
@@ -795,11 +778,7 @@ class BoerneRutinerCard extends HTMLElement {
       gridHtml += `<div class="picker-category">${category}</div>`;
       gridHtml += `<div class="picker-grid">`;
       for (const ic of filtered) {
-        if (tab === "mdi") {
-          gridHtml += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}"><ha-icon icon="${ic}"></ha-icon></button>`;
-        } else {
-          gridHtml += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
-        }
+        gridHtml += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
       }
       gridHtml += `</div>`;
     }
@@ -811,10 +790,6 @@ class BoerneRutinerCard extends HTMLElement {
         <div class="picker-header">
           <span class="picker-title">Vælg ikon</span>
           <button class="small-btn" data-action="close-icon-picker">✕</button>
-        </div>
-        <div class="picker-tabs">
-          <button class="picker-tab ${tab === "emoji" ? "active" : ""}" data-action="icon-picker-tab" data-tab="emoji">😀 Emoji</button>
-          <button class="picker-tab ${tab === "mdi" ? "active" : ""}" data-action="icon-picker-tab" data-tab="mdi">🎨 MDI Ikoner</button>
         </div>
         <input type="text" class="form-input picker-search" id="icon-picker-search"
                placeholder="Søg ikoner…" value="${this._iconPickerSearch || ""}">
@@ -1268,7 +1243,6 @@ class BoerneRutinerCard extends HTMLElement {
             this._syncEditingState();
             this._iconPickerTarget = btn.dataset.target;
             this._iconPickerSearch = "";
-            this._iconPickerTab = "emoji";
             this._render();
             setTimeout(() => {
               const s = this.shadowRoot.getElementById("icon-picker-search");
@@ -1292,9 +1266,8 @@ class BoerneRutinerCard extends HTMLElement {
         // Re-render only the picker body to avoid losing focus
         const body = this.shadowRoot.querySelector(".picker-body");
         if (body) {
-          const tab = this._iconPickerTab;
           const search = (this._iconPickerSearch || "").toLowerCase();
-          const data = ICON_PICKER_DATA[tab];
+          const data = ICON_PICKER_DATA.emoji;
           let html = "";
           for (const [category, icons] of Object.entries(data)) {
             const filtered = icons.filter((ic) => {
@@ -1305,11 +1278,7 @@ class BoerneRutinerCard extends HTMLElement {
             html += `<div class="picker-category">${category}</div>`;
             html += `<div class="picker-grid">`;
             for (const ic of filtered) {
-              if (tab === "mdi") {
-                html += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}"><ha-icon icon="${ic}"></ha-icon></button>`;
-              } else {
-                html += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
-              }
+              html += `<button class="picker-icon-btn" data-action="pick-icon" data-icon="${ic}" title="${ic}">${ic}</button>`;
             }
             html += `</div>`;
           }
@@ -1340,15 +1309,6 @@ class BoerneRutinerCard extends HTMLElement {
           this._syncEditingState();
           this._iconPickerTarget = null;
           this._render();
-        } else if (action === "icon-picker-tab") {
-          this._syncEditingState();
-          this._iconPickerTab = btn.dataset.tab;
-          this._iconPickerSearch = "";
-          this._render();
-          setTimeout(() => {
-            const s = this.shadowRoot.getElementById("icon-picker-search");
-            if (s) s.focus();
-          }, 50);
         }
       });
     }
@@ -1625,10 +1585,8 @@ class BoerneRutinerCard extends HTMLElement {
         border-color: var(--primary);
       }
       .child-avatar { font-size: 18px; }
-      ha-icon.child-avatar { --mdc-icon-size: 18px; }
       .child-name { font-size: 14px; }
       .child-tab.small .child-avatar { font-size: 16px; }
-      .child-tab.small ha-icon.child-avatar { --mdc-icon-size: 16px; }
       .child-tab.small .child-name { font-size: 12px; }
 
       /* ── Routine tabs ── */
@@ -1659,7 +1617,6 @@ class BoerneRutinerCard extends HTMLElement {
         background: color-mix(in srgb, var(--routine-color, var(--primary)) 12%, transparent);
       }
       .routine-icon { font-size: 22px; }
-      ha-icon.routine-icon { --mdc-icon-size: 22px; }
       .routine-label {
         font-size: 11px;
         font-weight: 600;
@@ -1739,7 +1696,6 @@ class BoerneRutinerCard extends HTMLElement {
       }
       .task-item:active .task-check { transform: scale(1.3); }
       .task-icon { font-size: 20px; }
-      ha-icon.task-icon { --mdc-icon-size: 20px; }
       .task-name {
         font-size: 16px;
         font-weight: 500;
@@ -1999,7 +1955,6 @@ class BoerneRutinerCard extends HTMLElement {
         cursor: grab;
       }
       .admin-task-icon, .admin-child-avatar { font-size: 20px; }
-      ha-icon.admin-task-icon, ha-icon.admin-child-avatar, ha-icon.admin-routine-tab-icon { --mdc-icon-size: 20px; }
       .admin-task-name, .admin-child-name {
         flex: 1;
         font-size: 14px;
@@ -2112,28 +2067,6 @@ class BoerneRutinerCard extends HTMLElement {
         font-weight: 700;
         color: var(--text);
       }
-      .picker-tabs {
-        display: flex;
-        gap: 4px;
-        padding: 0 16px 8px;
-      }
-      .picker-tab {
-        flex: 1;
-        padding: 8px;
-        border: none;
-        border-radius: 8px;
-        background: rgba(0,0,0,0.04);
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text-secondary);
-        transition: all 0.2s;
-        font-family: inherit;
-      }
-      .picker-tab.active {
-        background: var(--primary);
-        color: #fff;
-      }
       .picker-search {
         margin: 0 16px 8px;
         flex: unset;
@@ -2175,9 +2108,6 @@ class BoerneRutinerCard extends HTMLElement {
         background: rgba(92, 107, 192, 0.12);
         border-color: var(--primary);
         transform: scale(1.1);
-      }
-      .picker-icon-btn ha-icon {
-        --mdc-icon-size: 24px;
       }
       .picker-empty {
         text-align: center;

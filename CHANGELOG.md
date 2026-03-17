@@ -2,6 +2,14 @@
 
 Alle ændringer i BørneRutiner dokumenteres her.
 
+## [1.2.0] - 2026-03-17
+
+### Ændret
+
+- **Fjernet MDI-ikon understøttelse** — Icon picker bruger nu udelukkende emojis. MDI-ikoner er fjernet for at holde kortet enkelt og hurtigt. Alle eksisterende emoji-ikoner virker som før.
+
+---
+
 ## [1.1.0] - 2026-03-12
 
 ### Tilføjet
