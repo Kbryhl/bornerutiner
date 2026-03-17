@@ -3,12 +3,12 @@
  * A Lovelace card where children can track daily routines
  * and parents can manage tasks behind a PIN code.
  *
- * Version: 1.2.0
+ * Version: 1.3.0
  */
 
 const STORAGE_KEY = "boerne-rutiner";
 const STORAGE_ENTITY = "sensor.boerne_rutiner_data";
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 
 /* ───────── Default routines (template for new children) ───────── */
 function defaultRoutines() {
@@ -279,6 +279,22 @@ class BoerneRutinerCard extends HTMLElement {
   }
 
   /* ── Lifecycle (visibility‑based refresh) ── */
+  _startPolling() {
+    if (this._pollInterval) clearInterval(this._pollInterval);
+    this._pollInterval = setInterval(() => {
+      if (this._hass && this._dataLoaded) {
+        const entity = this._hass.states?.[STORAGE_ENTITY];
+        if (entity) {
+          const lu = entity.last_updated;
+          if (lu !== this._lastEntityUpdate) {
+            this._lastEntityUpdate = lu;
+            this._syncFromEntity(entity);
+          }
+        }
+      }
+    }, 30000); // 30 sekunder
+  }
+
   connectedCallback() {
     this._onVisibilityChange = () => {
       if (document.visibilityState === "visible" && this._hass && this._dataLoaded) {
@@ -286,12 +302,14 @@ class BoerneRutinerCard extends HTMLElement {
       }
     };
     document.addEventListener("visibilitychange", this._onVisibilityChange);
+    this._startPolling();
   }
 
   disconnectedCallback() {
     if (this._onVisibilityChange) {
       document.removeEventListener("visibilitychange", this._onVisibilityChange);
     }
+    if (this._pollInterval) clearInterval(this._pollInterval);
   }
 
   /* ── Lovelace interface ── */

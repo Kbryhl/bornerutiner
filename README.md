@@ -2,7 +2,7 @@
 
 Et custom Home Assistant Lovelace-kort, der hjælper børn med at holde styr på deres daglige rutiner. Forældre kan styre opgaver, rutiner og børn bag en PIN-beskyttet admin-side.
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -22,6 +22,7 @@ Et custom Home Assistant Lovelace-kort, der hjælper børn med at holde styr på
 - **Synkronisering på tværs af enheder** – Alle enheder ser de samme data i realtid
 - **Mørkt tema** – Følger dit Home Assistant-tema automatisk
 - **Ingen ekstra integrationer påkrævet** – Alt data gemmes direkte i Home Assistant
+- **Automatisk fallback polling** – Hvis realtids-sync fejler, poller kortet automatisk Home Assistant hvert 30. sekund for at sikre synkronisering på alle enheder.
 
 ---
 

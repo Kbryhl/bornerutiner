@@ -2,6 +2,13 @@
 
 Alle ændringer i BørneRutiner dokumenteres her.
 
+## [1.3.0] - 2026-03-17
+
+### Tilføjet
+
+- **Automatisk fallback polling** — Kortet poller nu Home Assistant entity hvert 30. sekund for at sikre synkronisering, selv hvis realtids-sync/WebSocket fejler på enkelte enheder.
+
+---
 ## [1.2.0] - 2026-03-17
 
 ### Ændret
